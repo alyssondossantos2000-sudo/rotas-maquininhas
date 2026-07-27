@@ -62,7 +62,7 @@
 
     <div id="tab-foto" class="tab-panel hidden">
       <label class="btn btn-secondary btn-block" for="foto-input">📷 Tirar foto / escolher imagem</label>
-      <input type="file" id="foto-input" accept="image/*" capture="environment" class="hidden">
+      <input type="file" id="foto-input" accept="image/*" class="hidden">
       <div id="ocr-status" class="muted hidden"></div>
       <img id="foto-preview" class="foto-preview hidden">
       <details id="ocr-raw-wrap" class="hidden">
@@ -116,15 +116,6 @@
 
     <button id="btn-otimizar" class="btn btn-primary btn-block">Otimizar rota</button>
     <div id="rota-build-status" class="muted"></div>
-
-    <div id="rota-map-wrap" class="hidden">
-      <div id="rota-map"></div>
-      <ol id="rota-otimizada-list" class="stop-list"></ol>
-      <div class="btn-row">
-        <button type="button" id="btn-rota-cancelar" class="btn btn-ghost">Cancelar</button>
-        <button type="button" id="btn-rota-salvar" class="btn btn-primary">Salvar rota</button>
-      </div>
-    </div>
   </section>
 
   <!-- ROTA DETAIL (dia a dia) -->

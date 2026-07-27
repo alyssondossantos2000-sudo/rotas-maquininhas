@@ -13,7 +13,6 @@ let buildSelected = new Map(); // id -> os object (para montar rota)
 let buildOrder = [];           // array de os objects na ordem otimizada/manual
 let buildOrigin = null;        // {lat,lng,label} ou null
 let buildResult = null;        // {distanceKm, durationMin, geometry}
-let buildMap = null;
 
 let detailRota = null;
 let detailStops = [];
@@ -57,7 +56,6 @@ function showView(name) {
   };
   $("header-title").textContent = titles[name] || "Rotas Maquininhas";
 
-  if (name !== "rota-build" && buildMap) { buildMap.remove(); buildMap = null; }
   if (name !== "rota-detail" && detailMap) { detailMap.remove(); detailMap = null; }
   if (name !== "os-form" && osFormMap) { osFormMap.remove(); osFormMap = null; }
   if (name !== "rota-detail") $("floating-widget").classList.add("hidden");
@@ -418,7 +416,6 @@ async function openRotaBuild() {
   $("rota-nome").value = "";
   $("rota-data").value = new Date().toISOString().slice(0, 10);
   $("rota-origem").value = "";
-  $("rota-map-wrap").classList.add("hidden");
   $("rota-build-status").textContent = "";
 
   const { data, error } = await supabase.from("ordens_servico").select("*").eq("status", "pendente").order("created_at", { ascending: false });
@@ -505,40 +502,20 @@ $("btn-otimizar").addEventListener("click", async () => {
     buildOrder = result.order.map((i) => comCoordenadas[i]);
     buildResult = { distanceKm: result.distanceKm, durationMin: result.durationMin, geometry: result.geometry };
     buildOrigin = origin;
-    statusEl.textContent = `Pronto! ${fmtKm(result.distanceKm)} · ${fmtMin(result.durationMin)}`;
-    renderBuildResult();
+
+    // Salva a rota no banco assim que ela é calculada — antes até de mostrar a prévia.
+    // Antes, a rota só existia na memória do navegador até o usuário clicar em "Salvar rota" no
+    // final; se ele saísse do app antes disso (ex: pra mandar mensagem no WhatsApp de uma parada),
+    // perdia tudo. Agora, uma vez otimizada, a rota já está salva e não some mais.
+    statusEl.textContent = "Salvando rota...";
+    const insertedId = await salvarRotaAtual();
+    toast(`Rota otimizada e salva! ${fmtKm(result.distanceKm)} · ${fmtMin(result.durationMin)}`);
+    openRotaDetail(insertedId);
   } catch (err) {
-    statusEl.textContent = "Erro ao otimizar: " + err.message;
+    statusEl.textContent = "Erro ao otimizar/salvar: " + err.message;
   }
   $("btn-otimizar").disabled = false;
 });
-
-function renderBuildResult() {
-  $("rota-map-wrap").classList.remove("hidden");
-  renderStopListEditable($("rota-otimizada-list"), buildOrder, (newOrder) => { buildOrder = newOrder; renderBuildResult(); });
-
-  if (buildMap) { buildMap.remove(); buildMap = null; }
-  buildMap = L.map("rota-map");
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap" }).addTo(buildMap);
-  const points = [];
-  if (buildOrigin) points.push([buildOrigin.lat, buildOrigin.lng]);
-  buildOrder.forEach((os) => points.push([os.lat, os.lng]));
-
-  let n = 1;
-  if (buildOrigin) {
-    L.marker([buildOrigin.lat, buildOrigin.lng], { icon: numberedIcon("P", "#3ecf8e") }).addTo(buildMap);
-  }
-  buildOrder.forEach((os) => {
-    L.marker([os.lat, os.lng], { icon: numberedIcon(n, "#3d8bfd") }).addTo(buildMap).bindPopup(`OS ${os.numero_os} — ${os.nome_cliente}`);
-    n++;
-  });
-  if (buildResult && buildResult.geometry) {
-    const latlngs = buildResult.geometry.coordinates.map((c) => [c[1], c[0]]);
-    L.polyline(latlngs, { color: "#3d8bfd", weight: 4 }).addTo(buildMap);
-  }
-  if (points.length) buildMap.fitBounds(points, { padding: [30, 30] });
-  setTimeout(() => buildMap && buildMap.invalidateSize(), 100);
-}
 
 function numberedIcon(label, color) {
   return L.divIcon({
@@ -612,13 +589,9 @@ function renderStopListEditable(container, order, onReorder, opts = {}) {
   });
 }
 
-$("btn-rota-cancelar").addEventListener("click", () => { showView("rotas-list"); loadRotas(); });
-
-$("btn-rota-salvar").addEventListener("click", async () => {
+async function salvarRotaAtual() {
   const nome = $("rota-nome").value.trim() || "Rota sem nome";
   const data = $("rota-data").value || new Date().toISOString().slice(0, 10);
-  const btn = $("btn-rota-salvar");
-  btn.disabled = true; btn.textContent = "Salvando...";
 
   const payload = {
     nome, data,
@@ -631,16 +604,13 @@ $("btn-rota-salvar").addEventListener("click", async () => {
     origem_lng: buildOrigin ? buildOrigin.lng : null,
   };
   const { data: inserted, error } = await supabase.from("rotas").insert(payload).select().single();
-  if (error) { toast("Erro ao salvar rota: " + error.message); btn.disabled = false; btn.textContent = "Salvar rota"; return; }
+  if (error) throw new Error(error.message);
 
   for (let i = 0; i < buildOrder.length; i++) {
     await supabase.from("ordens_servico").update({ rota_id: inserted.id, ordem_na_rota: i + 1, status: "roteirizada" }).eq("id", buildOrder[i].id);
   }
-
-  btn.disabled = false; btn.textContent = "Salvar rota";
-  toast("Rota salva!");
-  openRotaDetail(inserted.id);
-});
+  return inserted.id;
+}
 
 // ---------------------------------------------------------------- Rota detail
 async function openRotaDetail(id) {
