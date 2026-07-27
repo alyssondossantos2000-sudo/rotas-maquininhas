@@ -1,7 +1,31 @@
 // Fotos tiradas direto da câmera do celular costumam vir enormes (3000-4000px, vários MB).
 // Processar isso cru no Tesseract.js pode estourar a memória do navegador no celular e derrubar
 // a aba (o app "reinicia" sozinho). Por isso sempre reduzimos a imagem antes de rodar o OCR.
-const MAX_DIM_OCR = 1800;
+const MAX_DIM_OCR = 2000;
+
+// Converte pra tons de cinza e "estica" o contraste (o pixel mais escuro vira preto, o mais claro
+// vira branco) — isso ajuda MUITO o Tesseract a ler foto de papel com sombra/pouca luz, sem o
+// risco de um threshold fixo (preto/branco bruto) que pode arruinar partes com iluminação desigual.
+function aplicarCinzaEContraste(ctx, w, h) {
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const px = imgData.data;
+  const cinzas = new Uint8ClampedArray(w * h);
+
+  let min = 255, max = 0;
+  for (let i = 0, j = 0; i < px.length; i += 4, j++) {
+    const cinza = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+    cinzas[j] = cinza;
+    if (cinza < min) min = cinza;
+    if (cinza > max) max = cinza;
+  }
+
+  const range = Math.max(1, max - min);
+  for (let i = 0, j = 0; i < px.length; i += 4, j++) {
+    const v = ((cinzas[j] - min) / range) * 255;
+    px[i] = px[i + 1] = px[i + 2] = v;
+  }
+  ctx.putImageData(imgData, 0, 0);
+}
 
 async function reduzirImagem(file, maxDim = MAX_DIM_OCR) {
   const bitmap = await createImageBitmap(file);
@@ -16,9 +40,43 @@ async function reduzirImagem(file, maxDim = MAX_DIM_OCR) {
   ctx.drawImage(bitmap, 0, 0, w, h);
   bitmap.close?.();
 
+  try {
+    aplicarCinzaEContraste(ctx, w, h);
+  } catch (err) {
+    console.error("Não foi possível melhorar o contraste da imagem:", err);
+  }
+
   return new Promise((resolve) => {
-    canvas.toBlob((blob) => resolve(blob || file), "image/jpeg", 0.85);
+    canvas.toBlob((blob) => resolve(blob || file), "image/jpeg", 0.9);
   });
+}
+
+// O motor do Tesseract.js baixa ~2-3MB de "dicionário" de português e inicializa o mecanismo
+// de leitura na primeira vez que é usado — isso é o que demora mais, não a leitura da foto em si.
+// Por isso deixamos um único worker pronto e reaproveitado entre fotos, e começamos a prepará-lo
+// assim que o usuário abre a aba "Por foto" (antes mesmo de tirar a foto), pra esconder essa espera.
+let workerPromise = null;
+// O logger é fixado na criação do worker (a API do Tesseract.js não permite trocar depois),
+// então usamos um callback "atual" mutável — cada chamada de runOcr aponta pra sua própria função.
+let currentLogCallback = null;
+
+function traduzirStatus(m) {
+  if (m.status === "recognizing text") return `Lendo a foto... ${Math.round(m.progress * 100)}%`;
+  if (m.status === "loading language traineddata") return `Baixando dicionário de português... ${Math.round(m.progress * 100)}%`;
+  if (m.status) return "Preparando leitor de texto...";
+  return null;
+}
+
+export function warmupOcr(onStatus) {
+  if (workerPromise) return workerPromise;
+  onStatus?.("Preparando leitor de texto...");
+  workerPromise = Tesseract.createWorker("por", 1, {
+    logger: (m) => currentLogCallback?.(m),
+  }).catch((err) => {
+    workerPromise = null; // permite tentar de novo se falhar
+    throw err;
+  });
+  return workerPromise;
 }
 
 // OCR no navegador via Tesseract.js (gratuito, sem chave de API).
@@ -30,12 +88,19 @@ export async function runOcr(file, onProgress) {
     console.error("Não foi possível reduzir a imagem, usando original:", err);
   }
 
-  const { data } = await Tesseract.recognize(imagem, "por", {
-    logger: (m) => {
-      if (onProgress && m.status === "recognizing text") onProgress(Math.round(m.progress * 100));
-    },
-  });
-  return data.text || "";
+  currentLogCallback = (m) => {
+    const texto = traduzirStatus(m);
+    if (texto) onProgress?.(texto);
+  };
+  onProgress?.("Preparando leitor de texto...");
+
+  try {
+    const worker = await warmupOcr(onProgress);
+    const { data } = await worker.recognize(imagem);
+    return data.text || "";
+  } finally {
+    currentLogCallback = null;
+  }
 }
 
 // Marcas/adquirentes comuns nos formulários de OS de maquininha — usadas para descobrir o

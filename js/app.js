@@ -1,7 +1,7 @@
 import { supabase } from "./supabaseClient.js";
 import { geocodeAddress } from "./geocode.js";
 import { optimizeTrip } from "./osrm.js";
-import { runOcr, parseOsFields } from "./ocr.js";
+import { runOcr, parseOsFields, warmupOcr } from "./ocr.js";
 
 // ---------------------------------------------------------------- state
 let currentUser = null;
@@ -280,6 +280,9 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
 function switchTab(tab) {
   document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   $("tab-foto").classList.toggle("hidden", tab !== "foto");
+  // Começa a preparar o leitor de texto assim que a aba "Por foto" abre, antes da foto ser
+  // tirada — assim o tempo de download/inicialização fica escondido enquanto o usuário fotografa.
+  if (tab === "foto") warmupOcr();
 }
 
 let ultimaOrigemCadastro = "manual";
@@ -295,10 +298,10 @@ $("foto-input").addEventListener("change", async (e) => {
 
   const statusEl = $("ocr-status");
   statusEl.classList.remove("hidden");
-  statusEl.textContent = "Lendo a foto... 0%";
+  statusEl.textContent = "Preparando...";
 
   try {
-    const text = await runOcr(file, (pct) => { statusEl.textContent = `Lendo a foto... ${pct}%`; });
+    const text = await runOcr(file, (msg) => { statusEl.textContent = msg; });
     statusEl.textContent = "Leitura concluída — confira os campos abaixo.";
     const fields = parseOsFields(text);
     if (fields.numero_os) $("os-numero").value = fields.numero_os;
