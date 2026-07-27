@@ -10,6 +10,7 @@ App para cadastrar OS (ordens de serviço) de instalação/manutenção de maqui
 - Geocodificação automática do endereço (localiza no mapa), limitada à região de Ponta Porã/MS (inclui Itamarati e Sanga Puitã) — evita que um endereço parecido de outra cidade do Brasil seja encontrado por engano. Se o endereço completo não for encontrado dentro dessa região, tenta de novo com versões mais simples até achar ao menos a cidade
 - Ajuste manual no mapa: na tela de cadastro/edição de OS, dá pra abrir um mapa e arrastar o marcador para corrigir a localização quando a busca automática erra ou não encontra
 - Montagem de rota: seleciona as OS pendentes, escolhe um ponto de partida (endereço ou GPS do celular) e o app calcula a melhor ordem de visita
+- Parada rápida direto na tela de rota: só cliente e endereço são obrigatórios (serviço, máquina, contato e observações são opcionais) — não precisa passar pelo cadastro completo de OS pra adicionar uma parada
 - Edição da rota: reordenar manualmente (▲▼), remover parada, "deixar pra depois" (manda a parada pro final da rota), reotimizar
 - Observação por parada: pode anotar algo específico daquela entrega direto na tela da rota
 - Tela de "dia a dia": lista das paradas em ordem, botões para abrir no Google Maps, Waze ou mandar mensagem no WhatsApp (quando a OS tem contato), marcar como concluída
