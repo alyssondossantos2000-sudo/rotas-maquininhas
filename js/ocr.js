@@ -1,6 +1,36 @@
+// Fotos tiradas direto da câmera do celular costumam vir enormes (3000-4000px, vários MB).
+// Processar isso cru no Tesseract.js pode estourar a memória do navegador no celular e derrubar
+// a aba (o app "reinicia" sozinho). Por isso sempre reduzimos a imagem antes de rodar o OCR.
+const MAX_DIM_OCR = 1800;
+
+async function reduzirImagem(file, maxDim = MAX_DIM_OCR) {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
+  const w = Math.round(bitmap.width * scale);
+  const h = Math.round(bitmap.height * scale);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  bitmap.close?.();
+
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob || file), "image/jpeg", 0.85);
+  });
+}
+
 // OCR no navegador via Tesseract.js (gratuito, sem chave de API).
 export async function runOcr(file, onProgress) {
-  const { data } = await Tesseract.recognize(file, "por", {
+  let imagem = file;
+  try {
+    imagem = await reduzirImagem(file);
+  } catch (err) {
+    console.error("Não foi possível reduzir a imagem, usando original:", err);
+  }
+
+  const { data } = await Tesseract.recognize(imagem, "por", {
     logger: (m) => {
       if (onProgress && m.status === "recognizing text") onProgress(Math.round(m.progress * 100));
     },
