@@ -111,6 +111,18 @@
       </div>
     </label>
 
+    <h3>Adicionar parada rápida</h3>
+    <form id="form-parada-rapida">
+      <label>Nome do cliente *<input type="text" id="qp-cliente" required></label>
+      <label>Endereço completo *<textarea id="qp-endereco" rows="2" required placeholder="Rua, número, bairro"></textarea></label>
+      <label>Tipo de serviço<input type="text" id="qp-servico" placeholder="Instalação, troca, manutenção..."></label>
+      <label>Máquina<input type="text" id="qp-maquina" placeholder="Cielo, Stone, Sicredi..."></label>
+      <label>Contato (opcional)<input type="tel" id="qp-contato" placeholder="(67) 91234-5678"></label>
+      <label>Observações (opcional)<textarea id="qp-obs" rows="2"></textarea></label>
+      <button type="submit" class="btn btn-secondary btn-block">+ Adicionar parada</button>
+      <p id="qp-status" class="muted"></p>
+    </form>
+
     <h3>Selecione as OS pendentes</h3>
     <div id="rota-os-select" class="list"></div>
 

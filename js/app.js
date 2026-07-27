@@ -170,7 +170,7 @@ function renderOsList(list) {
     card.className = "card";
     card.innerHTML = `
       <div class="card-title">
-        <span>OS ${escapeHtml(os.numero_os)} — ${escapeHtml(os.nome_cliente)}</span>
+        <span>${osLabel(os)}</span>
         <span class="badge badge-${os.status}">${STATUS_LABEL[os.status]}</span>
       </div>
       <div class="card-sub">📍 ${escapeHtml(os.endereco)}</div>
@@ -187,6 +187,11 @@ function renderOsList(list) {
 
 function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// Paradas cadastradas rápido (direto na aba Rotas) podem não ter número de OS.
+function osLabel(os) {
+  return os.numero_os ? `OS ${escapeHtml(os.numero_os)} — ${escapeHtml(os.nome_cliente)}` : escapeHtml(os.nome_cliente);
 }
 
 async function deleteOs(id) {
@@ -408,6 +413,21 @@ function formatDate(iso) {
 }
 
 // ---------------------------------------------------------------- Rota build
+function addOsSelectRow(os, { checked = false } = {}) {
+  $("rota-os-select-empty")?.remove();
+  const row = document.createElement("label");
+  row.className = "os-select-row";
+  row.innerHTML = `
+    <input type="checkbox" data-id="${os.id}" ${checked ? "checked" : ""}>
+    <div class="info"><b>${osLabel(os)}</b><span>${escapeHtml(os.endereco)}</span></div>`;
+  row.querySelector("input").addEventListener("change", (e) => {
+    if (e.target.checked) buildSelected.set(os.id, os);
+    else buildSelected.delete(os.id);
+  });
+  $("rota-os-select").appendChild(row);
+  if (checked) buildSelected.set(os.id, os);
+}
+
 async function openRotaBuild() {
   buildSelected = new Map();
   buildOrder = [];
@@ -417,27 +437,57 @@ async function openRotaBuild() {
   $("rota-data").value = new Date().toISOString().slice(0, 10);
   $("rota-origem").value = "";
   $("rota-build-status").textContent = "";
+  $("form-parada-rapida").reset();
+  $("qp-status").textContent = "";
 
   const { data, error } = await supabase.from("ordens_servico").select("*").eq("status", "pendente").order("created_at", { ascending: false });
   if (error) { toast("Erro ao carregar OS pendentes: " + error.message); return; }
 
   const wrap = $("rota-os-select");
   wrap.innerHTML = "";
-  if (!data.length) wrap.innerHTML = `<p class="empty">Nenhuma OS pendente para roteirizar.</p>`;
-  for (const os of data) {
-    const row = document.createElement("label");
-    row.className = "os-select-row";
-    row.innerHTML = `
-      <input type="checkbox" data-id="${os.id}">
-      <div class="info"><b>OS ${escapeHtml(os.numero_os)} — ${escapeHtml(os.nome_cliente)}</b><span>${escapeHtml(os.endereco)}</span></div>`;
-    row.querySelector("input").addEventListener("change", (e) => {
-      if (e.target.checked) buildSelected.set(os.id, os);
-      else buildSelected.delete(os.id);
-    });
-    wrap.appendChild(row);
-  }
+  if (!data.length) wrap.innerHTML = `<p id="rota-os-select-empty" class="empty">Nenhuma OS pendente para roteirizar.</p>`;
+  for (const os of data) addOsSelectRow(os);
   showView("rota-build");
 }
+
+$("form-parada-rapida").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const statusEl = $("qp-status");
+  const nome_cliente = $("qp-cliente").value.trim();
+  const endereco = $("qp-endereco").value.trim();
+  if (!nome_cliente || !endereco) {
+    statusEl.textContent = "Preencha cliente e endereço.";
+    return;
+  }
+
+  const btn = e.target.querySelector('button[type="submit"]');
+  btn.disabled = true;
+  statusEl.textContent = "Localizando endereço...";
+
+  const geo = await geocodeAddress(endereco);
+  const payload = {
+    nome_cliente,
+    endereco,
+    servico: $("qp-servico").value.trim(),
+    banco: $("qp-maquina").value.trim(),
+    contato: $("qp-contato").value.trim(),
+    observacoes: $("qp-obs").value.trim(),
+    status: "pendente",
+    origem_cadastro: "manual",
+    lat: geo ? geo.lat : null,
+    lng: geo ? geo.lng : null,
+    geocode_status: geo ? "ok" : "falhou",
+  };
+
+  const { data: inserted, error } = await supabase.from("ordens_servico").insert(payload).select().single();
+  btn.disabled = false;
+
+  if (error) { statusEl.textContent = "Erro ao adicionar: " + error.message; return; }
+
+  addOsSelectRow(inserted, { checked: true });
+  e.target.reset();
+  statusEl.textContent = geo ? "Parada adicionada e já marcada na lista abaixo!" : "Parada adicionada, mas não localizei o endereço — ajuste depois em \"OS\" > Editar.";
+});
 
 $("rota-origem").addEventListener("input", () => { buildOrigin = null; });
 
@@ -543,7 +593,7 @@ function renderStopListEditable(container, order, onReorder, opts = {}) {
     li.innerHTML = `
       <div class="stop-num">${idx + 1}</div>
       <div class="stop-body">
-        <b>OS ${escapeHtml(os.numero_os)} — ${escapeHtml(os.nome_cliente)} ${os.status === "adiada" ? '<span class="badge badge-adiada">Adiada</span>' : ""}</b>
+        <b>${osLabel(os)} ${os.status === "adiada" ? '<span class="badge badge-adiada">Adiada</span>' : ""}</b>
         <span>📍 ${escapeHtml(os.endereco)}</span>
         <span>${os.banco ? "🏦 " + escapeHtml(os.banco) + " " : ""}${os.servico ? "· " + escapeHtml(os.servico) : ""}</span>
         <div class="stop-actions">
@@ -718,7 +768,7 @@ function updateFloatingWidget() {
   $("floating-bubble-num").textContent = idx + 1;
 
   $("floating-panel-body").innerHTML = `
-    <b>OS ${escapeHtml(proxima.numero_os)} — ${escapeHtml(proxima.nome_cliente)}</b>
+    <b>${osLabel(proxima)}</b>
     <div class="fp-line">📍 ${escapeHtml(proxima.endereco)}</div>
     ${proxima.banco || proxima.servico ? `<div class="fp-line">${proxima.banco ? "🏦 " + escapeHtml(proxima.banco) + " " : ""}${proxima.servico ? "· " + escapeHtml(proxima.servico) : ""}</div>` : ""}
     ${proxima.observacoes ? `<div class="fp-line">📝 ${escapeHtml(proxima.observacoes)}</div>` : ""}
