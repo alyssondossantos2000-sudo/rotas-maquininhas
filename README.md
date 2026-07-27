@@ -40,12 +40,7 @@ Não precisa pagar nada: GitHub Pages é grátis, e o banco de dados (Supabase) 
 
 Já está tudo configurado e funcionando (projeto `rotas-maquininhas`, plano gratuito, sem mensalidade). As chaves em `js/config.js` são públicas por design — a segurança é garantida por Row Level Security (cada login só enxerga seus próprios dados).
 
-**Importante — confirmação de e-mail:** por padrão o Supabase exige confirmar o e-mail antes do primeiro login. Para simplificar o uso (você/sua equipe), pode desativar isso:
-1. Entre em [supabase.com/dashboard](https://supabase.com/dashboard) → projeto `rotas-maquininhas`
-2. **Authentication → Sign In / Providers → Email**
-3. Desative **"Confirm email"**
-
-Sem isso, depois de criar a conta é preciso clicar no link que chega por e-mail antes de conseguir entrar.
+**Confirmação de e-mail:** já está resolvido — existe um gatilho no banco (`trg_auto_confirm_email`) que confirma automaticamente qualquer conta nova assim que ela é criada, então dá pra criar contas (para você ou sua equipe) e já entrar direto, sem precisar clicar em link de e-mail nem depender do painel do Supabase.
 
 ## Serviços externos usados (todos gratuitos)
 
