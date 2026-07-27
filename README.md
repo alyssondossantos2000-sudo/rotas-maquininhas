@@ -7,7 +7,7 @@ App para cadastrar OS (ordens de serviço) de instalação/manutenção de maqui
 - Login (cada usuário só vê as próprias OS/rotas)
 - Cadastro de OS: número, cliente, endereço, contato (telefone/WhatsApp), banco, serviço, observações
 - Cadastro por foto: tira uma foto da OS e o app tenta ler e preencher os campos sozinho — inclusive o contato — reconhecendo os padrões de vários modelos reais (C6 Bank/FedEx, Cielo, Azulzinha X, Sicredi, C-Trends etc). Você sempre confere antes de salvar
-- Geocodificação automática do endereço (localiza no mapa) — se o endereço completo não for encontrado (comum em cidades menores, com menos ruas mapeadas), tenta de novo com versões mais simples até achar ao menos a cidade
+- Geocodificação automática do endereço (localiza no mapa), limitada à região de Ponta Porã/MS (inclui Itamarati e Sanga Puitã) — evita que um endereço parecido de outra cidade do Brasil seja encontrado por engano. Se o endereço completo não for encontrado dentro dessa região, tenta de novo com versões mais simples até achar ao menos a cidade
 - Ajuste manual no mapa: na tela de cadastro/edição de OS, dá pra abrir um mapa e arrastar o marcador para corrigir a localização quando a busca automática erra ou não encontra
 - Montagem de rota: seleciona as OS pendentes, escolhe um ponto de partida (endereço ou GPS do celular) e o app calcula a melhor ordem de visita
 - Edição da rota: reordenar manualmente (▲▼), remover parada, "deixar pra depois" (manda a parada pro final da rota), reotimizar
