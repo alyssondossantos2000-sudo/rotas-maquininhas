@@ -1,0 +1,224 @@
+:root{
+  --bg:#0f172a;
+  --bg-alt:#16213a;
+  --card:#1c2942;
+  --card-2:#233052;
+  --border:#2c3a5c;
+  --text:#e8ecf5;
+  --muted:#93a0bd;
+  --primary:#3d8bfd;
+  --primary-dark:#2568d6;
+  --danger:#ef5b5b;
+  --ok:#3ecf8e;
+  --warn:#f5a623;
+  --radius:14px;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  -webkit-tap-highlight-color:transparent;
+}
+.hidden{display:none !important}
+
+#app{
+  max-width:560px;
+  margin:0 auto;
+  min-height:100vh;
+  padding-bottom:78px;
+}
+
+/* ---- header / nav ---- */
+header{
+  position:sticky; top:0; z-index:20;
+  display:flex; align-items:center; justify-content:space-between;
+  padding:14px 16px;
+  background:var(--bg-alt);
+  border-bottom:1px solid var(--border);
+}
+header span{font-weight:700; font-size:18px}
+.icon-btn{
+  background:none; border:none; color:var(--muted); font-size:20px; cursor:pointer;
+}
+
+#bottom-nav{
+  position:fixed; bottom:0; left:0; right:0; z-index:30;
+  display:flex;
+  max-width:560px; margin:0 auto;
+  background:var(--bg-alt);
+  border-top:1px solid var(--border);
+  padding-bottom:env(safe-area-inset-bottom);
+}
+.nav-btn{
+  flex:1; background:none; border:none; color:var(--muted);
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+  padding:10px 0 8px; font-size:20px; cursor:pointer;
+}
+.nav-btn span{font-size:11px}
+.nav-btn.active{color:var(--primary)}
+
+/* ---- views ---- */
+.view{padding:16px}
+
+/* ---- login ---- */
+#view-login.view{display:flex; align-items:center; min-height:100vh; padding:24px}
+.login-box{width:100%; text-align:center}
+.login-logo{width:64px; height:64px; margin-bottom:8px}
+.login-box h1{font-size:22px; margin:0 0 4px}
+.muted{color:var(--muted); font-size:14px}
+#form-login{display:flex; flex-direction:column; gap:10px; margin-top:20px}
+
+/* ---- form elements ---- */
+input, textarea, select{
+  width:100%;
+  background:var(--card);
+  border:1px solid var(--border);
+  color:var(--text);
+  border-radius:10px;
+  padding:12px 14px;
+  font-size:15px;
+  font-family:inherit;
+}
+input::placeholder, textarea::placeholder{color:#5d6b8c}
+label{display:flex; flex-direction:column; gap:6px; font-size:13px; color:var(--muted); margin-bottom:12px}
+form{display:flex; flex-direction:column}
+
+.btn{
+  border:none; border-radius:10px; padding:13px 18px; font-size:15px; font-weight:600;
+  cursor:pointer; text-align:center;
+}
+.btn-primary{background:var(--primary); color:white}
+.btn-primary:active{background:var(--primary-dark)}
+.btn-secondary{background:var(--card-2); color:var(--text); border:1px solid var(--border)}
+.btn-ghost{background:none; color:var(--muted); border:1px solid var(--border)}
+.btn-danger{background:var(--danger); color:white}
+.btn-block{width:100%; display:block}
+.btn-row{display:flex; gap:10px; margin-top:6px}
+.btn-row .btn{flex:1}
+.btn-row input{flex:1}
+
+.error{color:var(--danger); font-size:13px; min-height:18px; margin:6px 0 0}
+
+/* ---- lists / cards ---- */
+.list{display:flex; flex-direction:column; gap:10px; margin-top:12px}
+.card{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:14px;
+}
+.card-title{font-weight:700; font-size:15px; display:flex; justify-content:space-between; gap:8px}
+.card-sub{color:var(--muted); font-size:13px; margin-top:4px; line-height:1.4}
+.card-actions{display:flex; gap:8px; margin-top:10px}
+.card-actions .btn{padding:8px 12px; font-size:13px; flex:none}
+
+.badge{
+  font-size:11px; font-weight:700; padding:3px 8px; border-radius:20px;
+  white-space:nowrap; height:fit-content;
+}
+.badge-pendente{background:#3a3220; color:var(--warn)}
+.badge-roteirizada{background:#1e2f4d; color:var(--primary)}
+.badge-concluida{background:#173829; color:var(--ok)}
+.badge-cancelada{background:#3a2020; color:var(--danger)}
+.badge-planejada{background:#1e2f4d; color:var(--primary)}
+.badge-em_andamento{background:#3a3220; color:var(--warn)}
+.badge-adiada{background:#332047; color:#b98cf5}
+
+.empty{color:var(--muted); text-align:center; margin-top:40px; font-size:14px}
+
+.filter-bar{display:flex; gap:8px}
+.filter-bar select{flex:none; width:auto}
+
+/* ---- tabs ---- */
+.tabs{display:flex; gap:8px; margin-bottom:16px}
+.tab-btn{
+  flex:1; background:var(--card); border:1px solid var(--border); color:var(--muted);
+  padding:10px; border-radius:10px; font-size:14px; cursor:pointer;
+}
+.tab-btn.active{background:var(--primary); color:white; border-color:var(--primary)}
+.tab-panel{margin-bottom:16px}
+
+.foto-preview{width:100%; border-radius:var(--radius); margin-top:12px}
+#ocr-raw-wrap{margin-top:10px; background:var(--card); border-radius:10px; padding:10px; font-size:12px}
+#ocr-raw-wrap pre{white-space:pre-wrap; color:var(--muted); margin:8px 0 0}
+
+/* ---- select list for building routes ---- */
+.os-select-row{
+  display:flex; align-items:center; gap:10px;
+  background:var(--card); border:1px solid var(--border); border-radius:12px; padding:12px;
+}
+.os-select-row input[type=checkbox]{width:20px; height:20px; flex:none}
+.os-select-row .info{flex:1; min-width:0}
+.os-select-row .info b{display:block; font-size:14px}
+.os-select-row .info span{display:block; font-size:12px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+
+/* ---- map ---- */
+#rota-map, #rota-detail-map, #os-map{
+  width:100%; height:240px; border-radius:var(--radius); margin:14px 0; border:1px solid var(--border);
+}
+#os-map-wrap{margin-bottom:12px}
+
+/* ---- stop list (ordered route) ---- */
+.stop-list{list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:10px}
+.stop-item{
+  background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:12px;
+  display:flex; gap:10px; align-items:flex-start;
+}
+.stop-num{
+  background:var(--primary); color:white; font-weight:700; font-size:13px;
+  width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex:none;
+}
+.stop-item.done .stop-num{background:var(--ok)}
+.stop-item.done{opacity:0.55}
+.stop-item.adiada{border-color:#b98cf5}
+.stop-item.adiada .stop-num{background:#b98cf5}
+.stop-body{flex:1; min-width:0}
+.stop-body b{font-size:14px; display:block}
+.stop-body span{font-size:12px; color:var(--muted); display:block; margin-top:2px}
+.stop-actions{display:flex; gap:6px; margin-top:8px; flex-wrap:wrap}
+.stop-actions .btn{padding:7px 10px; font-size:12px; flex:none}
+.stop-order-btns{display:flex; flex-direction:column; gap:4px}
+.stop-order-btns button{
+  background:var(--card-2); border:1px solid var(--border); color:var(--text);
+  width:26px; height:22px; border-radius:6px; font-size:11px; cursor:pointer;
+}
+.stop-note{
+  width:100%; margin-top:8px; resize:vertical; min-height:36px;
+  background:var(--card-2); border:1px solid var(--border); color:var(--text);
+  border-radius:8px; padding:8px 10px; font-size:12px; font-family:inherit;
+}
+.stop-note::placeholder{color:#5d6b8c}
+.stop-note-saved{font-size:11px; color:var(--ok); margin-top:4px; min-height:14px}
+
+/* ---- floating widget ---- */
+#floating-widget{position:fixed; right:16px; bottom:94px; z-index:40}
+.floating-bubble{
+  width:52px; height:52px; border-radius:50%;
+  background:var(--primary); color:white; border:none;
+  box-shadow:0 4px 14px rgba(0,0,0,.4);
+  font-size:16px; font-weight:700; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+}
+.floating-panel{
+  position:absolute; bottom:64px; right:0; width:260px;
+  background:var(--card); border:1px solid var(--border); border-radius:var(--radius);
+  box-shadow:0 8px 24px rgba(0,0,0,.5); overflow:hidden;
+}
+.floating-panel-head{
+  display:flex; justify-content:space-between; align-items:center;
+  padding:10px 12px; background:var(--card-2); font-size:12px; color:var(--muted); font-weight:700;
+}
+#floating-panel-body{padding:12px; font-size:13px}
+#floating-panel-body b{display:block; font-size:14px; margin-bottom:4px}
+#floating-panel-body .fp-line{color:var(--muted); font-size:12px; margin-bottom:6px; display:flex; gap:6px}
+#floating-panel-body .stop-actions{margin-top:10px}
+
+.toast{
+  position:fixed; bottom:90px; left:50%; transform:translateX(-50%);
+  background:var(--card-2); color:var(--text); padding:10px 18px; border-radius:30px;
+  font-size:13px; border:1px solid var(--border); z-index:50; max-width:90%; text-align:center;
+}

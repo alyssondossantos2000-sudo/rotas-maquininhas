@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Rotas Maquininhas</title>
+<meta name="theme-color" content="#0f172a">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon.svg">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- LOGIN -->
+  <section id="view-login" class="view">
+    <div class="login-box">
+      <img src="icons/icon.svg" class="login-logo" alt="">
+      <h1>Rotas Maquininhas</h1>
+      <p class="muted">Cadastro de OS e otimização de rotas de entrega</p>
+      <form id="form-login">
+        <input type="email" id="login-email" placeholder="E-mail" required autocomplete="email">
+        <input type="password" id="login-password" placeholder="Senha" required autocomplete="current-password">
+        <button type="submit" class="btn btn-primary btn-block">Entrar</button>
+      </form>
+      <button id="btn-signup" class="btn btn-ghost btn-block">Criar conta</button>
+      <p id="login-error" class="error"></p>
+    </div>
+  </section>
+
+  <!-- HEADER -->
+  <header id="app-header" class="hidden">
+    <span id="header-title">OS</span>
+    <button id="btn-logout" class="icon-btn" title="Sair">⏻</button>
+  </header>
+
+  <!-- OS LIST -->
+  <section id="view-os-list" class="view hidden">
+    <div class="filter-bar">
+      <select id="os-filter-status">
+        <option value="">Todas</option>
+        <option value="pendente" selected>Pendentes</option>
+        <option value="roteirizada">Roteirizadas</option>
+        <option value="concluida">Concluídas</option>
+        <option value="cancelada">Canceladas</option>
+      </select>
+      <input type="text" id="os-search" placeholder="Buscar cliente, OS, endereço...">
+    </div>
+    <div id="os-list" class="list"></div>
+    <p id="os-empty" class="empty hidden">Nenhuma OS encontrada.</p>
+  </section>
+
+  <!-- OS FORM (manual / foto) -->
+  <section id="view-os-form" class="view hidden">
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="manual">Manual</button>
+      <button class="tab-btn" data-tab="foto">Por foto</button>
+    </div>
+
+    <div id="tab-foto" class="tab-panel hidden">
+      <label class="btn btn-secondary btn-block" for="foto-input">📷 Tirar foto / escolher imagem</label>
+      <input type="file" id="foto-input" accept="image/*" capture="environment" class="hidden">
+      <div id="ocr-status" class="muted hidden"></div>
+      <img id="foto-preview" class="foto-preview hidden">
+      <details id="ocr-raw-wrap" class="hidden">
+        <summary>Texto reconhecido (conferir)</summary>
+        <pre id="ocr-raw-text"></pre>
+      </details>
+    </div>
+
+    <form id="form-os">
+      <input type="hidden" id="os-id">
+      <label>Número da OS *<input type="text" id="os-numero" required></label>
+      <label>Nome do cliente *<input type="text" id="os-cliente" required></label>
+      <label>Endereço completo *<textarea id="os-endereco" rows="2" required placeholder="Rua, número, bairro, cidade - UF"></textarea></label>
+      <button type="button" id="btn-ajustar-mapa" class="btn btn-secondary btn-block">🗺️ Ver/ajustar localização no mapa</button>
+      <div id="os-map-wrap" class="hidden">
+        <div id="os-map"></div>
+        <p id="os-map-status" class="muted">Arraste o marcador para ajustar o ponto certo.</p>
+      </div>
+      <label>Contato (telefone/WhatsApp)<input type="tel" id="os-contato" placeholder="(11) 91234-5678"></label>
+      <label>Banco<input type="text" id="os-banco"></label>
+      <label>Serviço<input type="text" id="os-servico" placeholder="Instalação, troca, manutenção..."></label>
+      <label>Observações<textarea id="os-obs" rows="2"></textarea></label>
+      <div class="btn-row">
+        <button type="button" id="btn-os-cancel" class="btn btn-ghost">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Salvar OS</button>
+      </div>
+      <p id="os-form-error" class="error"></p>
+    </form>
+  </section>
+
+  <!-- ROTAS LIST -->
+  <section id="view-rotas-list" class="view hidden">
+    <button id="btn-nova-rota" class="btn btn-primary btn-block">+ Nova rota</button>
+    <div id="rotas-list" class="list"></div>
+    <p id="rotas-empty" class="empty hidden">Nenhuma rota criada ainda.</p>
+  </section>
+
+  <!-- ROTA BUILD (seleção + otimização) -->
+  <section id="view-rota-build" class="view hidden">
+    <label>Nome da rota<input type="text" id="rota-nome" placeholder="Ex: Rota segunda-feira"></label>
+    <label>Data<input type="date" id="rota-data"></label>
+    <label>Ponto de partida
+      <div class="btn-row">
+        <input type="text" id="rota-origem" placeholder="Endereço de partida (opcional)">
+        <button type="button" id="btn-usar-gps" class="btn btn-secondary">📍 Usar GPS</button>
+      </div>
+    </label>
+
+    <h3>Selecione as OS pendentes</h3>
+    <div id="rota-os-select" class="list"></div>
+
+    <button id="btn-otimizar" class="btn btn-primary btn-block">Otimizar rota</button>
+    <div id="rota-build-status" class="muted"></div>
+
+    <div id="rota-map-wrap" class="hidden">
+      <div id="rota-map"></div>
+      <ol id="rota-otimizada-list" class="stop-list"></ol>
+      <div class="btn-row">
+        <button type="button" id="btn-rota-cancelar" class="btn btn-ghost">Cancelar</button>
+        <button type="button" id="btn-rota-salvar" class="btn btn-primary">Salvar rota</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ROTA DETAIL (dia a dia) -->
+  <section id="view-rota-detail" class="view hidden">
+    <div id="rota-detail-header"></div>
+    <div id="rota-detail-map"></div>
+    <ol id="rota-detail-stops" class="stop-list"></ol>
+    <button id="btn-rota-voltar" class="btn btn-ghost btn-block">Voltar para rotas</button>
+  </section>
+
+</div>
+
+<nav id="bottom-nav" class="hidden">
+  <button data-view="os-list" class="nav-btn active">📋<span>OS</span></button>
+  <button data-view="os-form" class="nav-btn">➕<span>Nova</span></button>
+  <button data-view="rotas-list" class="nav-btn">🗺️<span>Rotas</span></button>
+</nav>
+
+<div id="floating-widget" class="hidden">
+  <button id="floating-bubble" class="floating-bubble">
+    <span id="floating-bubble-num">1</span>
+  </button>
+  <div id="floating-panel" class="floating-panel hidden">
+    <div class="floating-panel-head">
+      <span>Próxima parada</span>
+      <button id="floating-close" class="icon-btn">✕</button>
+    </div>
+    <div id="floating-panel-body"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
