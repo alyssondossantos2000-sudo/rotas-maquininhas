@@ -4,6 +4,12 @@ let queue = Promise.resolve();
 const MIN_INTERVAL_MS = 1100;
 let lastCall = 0;
 
+// App limitado à região de Ponta Porã/MS (inclui os distritos de Itamarati e Sanga Puitã,
+// que fazem parte do mesmo município) — evita que um endereço parecido de outra cidade do
+// Brasil seja encontrado por engano. Caixa geográfica do município de Ponta Porã inteiro.
+const PONTA_PORA_BBOX = { minLat: -22.7642905, maxLat: -21.6339890, minLon: -56.1123178, maxLon: -54.9764267 };
+const VIEWBOX = `${PONTA_PORA_BBOX.minLon},${PONTA_PORA_BBOX.maxLat},${PONTA_PORA_BBOX.maxLon},${PONTA_PORA_BBOX.minLat}`;
+
 function throttledFetch(url) {
   queue = queue.then(async () => {
     const wait = Math.max(0, MIN_INTERVAL_MS - (Date.now() - lastCall));
@@ -15,7 +21,7 @@ function throttledFetch(url) {
 }
 
 async function buscarNominatim(query) {
-  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=${encodeURIComponent(query)}`;
+  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&viewbox=${VIEWBOX}&bounded=1&q=${encodeURIComponent(query)}`;
   const res = await throttledFetch(url);
   const data = await res.json();
   if (!data || !data.length) return null;
