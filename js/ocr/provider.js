@@ -1,8 +1,9 @@
 // Strategy Pattern pro OCR: o resto do app não sabe (nem precisa saber) que motor tá rodando por
-// baixo. Hoje só existe TesseractProvider (grátis, roda no navegador) — trocar por um serviço
-// pago no futuro (Google Vision, Azure, etc.) significa escrever uma nova classe com os mesmos
-// dois métodos e trocar a instância em getOcrProvider(), sem tocar em layout/, interpret/ ou ui/.
-import { comLog } from "../core/logger.js?v=14";
+// baixo. Trocar por um serviço pago no futuro (Google Vision, Azure, etc.) significa escrever uma
+// nova classe com os mesmos dois métodos e trocar a instância em getOcrProvider(), sem tocar em
+// layout/, interpret/ ou ui/.
+import { comLog } from "../core/logger.js?v=15";
+import { criarMlKitProvider } from "./mlkitProvider.js?v=15";
 
 function traduzirStatus(m) {
   if (m.status === "recognizing text") return `Lendo a foto... ${Math.round(m.progress * 100)}%`;
@@ -57,8 +58,15 @@ class TesseractProvider {
 }
 
 let instanciaPadrao = null;
+// Dentro do app nativo (APK) usa o Google ML Kit — offline, embutido no APK, e melhor que
+// Tesseract em foto de câmera real. No site (navegador comum, sem Capacitor) o ML Kit não existe,
+// então continua no Tesseract.js. `window.Capacitor?.isNativePlatform?.()` só existe/retorna true
+// dentro do WebView nativo.
 export function getOcrProvider() {
-  if (!instanciaPadrao) instanciaPadrao = new TesseractProvider();
+  if (!instanciaPadrao) {
+    const nativo = window.Capacitor?.isNativePlatform?.() === true;
+    instanciaPadrao = nativo ? criarMlKitProvider() : new TesseractProvider();
+  }
   return instanciaPadrao;
 }
 

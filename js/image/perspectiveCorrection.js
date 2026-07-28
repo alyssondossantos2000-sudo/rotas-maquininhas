@@ -3,7 +3,7 @@
 // resolve de verdade o caso que travou a sessão anterior (papel torto, mal enquadrado, fundo
 // bagunçado) porque a detecção de contorno isola o documento do fundo ANTES de qualquer correção —
 // diferente do hack de "inclinação fina" antigo, que se confundia com o fundo.
-import { getJscanify } from "./documentDetector.js?v=14";
+import { getJscanify } from "./documentDetector.js?v=15";
 
 function distancia(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);

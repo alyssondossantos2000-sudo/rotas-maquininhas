@@ -19,8 +19,13 @@
   },
   "homepage": "https://github.com/alyssondossantos2000-sudo/rotas-maquininhas#readme",
   "dependencies": {
+    "@capacitor-mlkit/text-recognition": "^8.2.0",
     "@capacitor/android": "^8.4.2",
     "@capacitor/cli": "^8.4.2",
-    "@capacitor/core": "^8.4.2"
+    "@capacitor/core": "^8.4.2",
+    "@capacitor/filesystem": "^8.1.2"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1"
   }
 }

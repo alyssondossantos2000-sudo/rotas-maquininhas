@@ -5,18 +5,18 @@
 //        → interpretar campos → preencher UI
 //
 // Substitui o antigo criarCapturaOcr/renderOcrOverlay que moravam dentro de app.js.
-import { detectarDocumento, garantirOpenCvCarregado } from "../image/documentDetector.js?v=14";
-import { corrigirPerspectiva } from "../image/perspectiveCorrection.js?v=14";
-import { desenharGirado, canvasParaBlob, calcularCorrecaoAutomatica } from "../image/autoRotate.js?v=14";
-import { proximaRotacaoManual } from "../image/manualRotate.js?v=14";
-import { talvezMelhorar } from "../image/enhancer.js?v=14";
-import { getOcrProvider, warmupOcr } from "../ocr/provider.js?v=14";
-import { normalizarResultado } from "../ocr/wordMapper.js?v=14";
-import { reconstruirLayout } from "../layout/blockDetection.js?v=14";
-import { interpretarDocumento, paraCamposDeOs } from "../interpret/documentInterpreter.js?v=14";
-import { renderizarOverlay } from "./overlay.js?v=14";
-import { criarControleZoom } from "./zoom.js?v=14";
-import { comLog } from "../core/logger.js?v=14";
+import { detectarDocumento, garantirOpenCvCarregado } from "../image/documentDetector.js?v=15";
+import { corrigirPerspectiva } from "../image/perspectiveCorrection.js?v=15";
+import { desenharGirado, canvasParaBlob, calcularCorrecaoAutomatica } from "../image/autoRotate.js?v=15";
+import { proximaRotacaoManual } from "../image/manualRotate.js?v=15";
+import { talvezMelhorar } from "../image/enhancer.js?v=15";
+import { getOcrProvider, warmupOcr } from "../ocr/provider.js?v=15";
+import { normalizarResultado } from "../ocr/wordMapper.js?v=15";
+import { reconstruirLayout } from "../layout/blockDetection.js?v=15";
+import { interpretarDocumento, paraCamposDeOs } from "../interpret/documentInterpreter.js?v=15";
+import { renderizarOverlay } from "./overlay.js?v=15";
+import { criarControleZoom } from "./zoom.js?v=15";
+import { comLog } from "../core/logger.js?v=15";
 
 // O usuário prefere usar a qualidade total da foto do celular (letra miúda de formulário real só
 // sai legível em resolução alta) e aceita que o OCR demore mais por causa disso.

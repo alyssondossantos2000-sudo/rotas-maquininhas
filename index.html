@@ -9,7 +9,7 @@
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/icon.svg">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="css/style.css?v=14">
+<link rel="stylesheet" href="css/style.css?v=15">
 </head>
 <body>
 
@@ -339,6 +339,10 @@
 <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
-<script type="module" src="js/app.js?v=14"></script>
+<!-- Só existe dentro do APK (gerado por scripts/build-www.mjs via esbuild) — no site (GitHub
+     Pages) essa tag dá 404 inofensivo, o código só usa window.NativePlugins quando roda dentro
+     do app nativo. Ver native/entry.js. -->
+<script src="vendor/native-plugins.js"></script>
+<script type="module" src="js/app.js?v=15"></script>
 </body>
 </html>
