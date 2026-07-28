@@ -208,8 +208,10 @@ function openOsForm(id) {
   $("form-os").reset();
   $("os-id").value = "";
   $("ocr-status").classList.add("hidden");
-  $("foto-preview").classList.add("hidden");
+  $("foto-preview-wrap").classList.add("hidden");
+  $("ocr-overlay").innerHTML = "";
   $("ocr-raw-wrap").classList.add("hidden");
+  $("ocr-raw-text").classList.add("hidden");
   $("os-map-wrap").classList.add("hidden");
   $("os-map-status").textContent = "Arraste o marcador para ajustar o ponto certo.";
   if (osFormMap) { osFormMap.remove(); osFormMap = null; }
@@ -297,15 +299,16 @@ $("foto-input").addEventListener("change", async (e) => {
 
   const preview = $("foto-preview");
   preview.src = URL.createObjectURL(file);
-  preview.classList.remove("hidden");
+  $("foto-preview-wrap").classList.remove("hidden");
+  $("ocr-overlay").innerHTML = "";
 
   const statusEl = $("ocr-status");
   statusEl.classList.remove("hidden");
   statusEl.textContent = "Preparando...";
 
   try {
-    const text = await runOcr(file, (msg) => { statusEl.textContent = msg; });
-    statusEl.textContent = "Leitura concluída — confira os campos abaixo.";
+    const { text, linhas, imgWidth, imgHeight } = await runOcr(file, (msg) => { statusEl.textContent = msg; });
+    statusEl.textContent = "Leitura concluída — selecione o texto na foto ou confira os campos abaixo.";
     const fields = parseOsFields(text);
     if (fields.numero_os) $("os-numero").value = fields.numero_os;
     if (fields.nome_cliente) $("os-cliente").value = fields.nome_cliente;
@@ -314,22 +317,58 @@ $("foto-input").addEventListener("change", async (e) => {
     if (fields.banco) $("os-banco").value = fields.banco;
     if (fields.servico) $("os-servico").value = fields.servico;
 
-    $("ocr-raw-text").textContent = text.trim() || "(nada reconhecido)";
     $("ocr-raw-wrap").classList.remove("hidden");
+    if (linhas && linhas.length && imgWidth && imgHeight) {
+      renderOcrOverlay(linhas, imgWidth, imgHeight);
+      $("ocr-raw-text").classList.add("hidden");
+    } else {
+      // Sem posição das palavras (ex: imagem não pôde ser reduzida) — mostra o texto puro como reserva.
+      $("ocr-raw-text").textContent = text.trim() || "(nada reconhecido)";
+      $("ocr-raw-text").classList.remove("hidden");
+    }
   } catch (err) {
     statusEl.textContent = "Não consegui ler a foto. Preencha manualmente.";
     console.error(err);
   }
 });
 
-// Fluxo rápido: seleciona um trecho do texto reconhecido e toca no campo — sem trocar de tela,
-// sem recarregar nada. Repete pra cada campo até preencher tudo.
+// Desenha o texto reconhecido em cima da própria foto (estilo Google Lens): cada palavra vira um
+// texto invisível posicionado exatamente onde ela aparece na imagem, selecionável com o dedo.
+function renderOcrOverlay(linhas, imgWidth, imgHeight) {
+  const overlay = $("ocr-overlay");
+  overlay.innerHTML = "";
+  linhas.forEach((linha) => {
+    linha.palavras.forEach((palavra) => {
+      const { x0, y0, x1, y1 } = palavra.bbox;
+      const span = document.createElement("span");
+      span.className = "ocr-word";
+      span.textContent = palavra.text;
+      span.style.left = (x0 / imgWidth) * 100 + "%";
+      span.style.top = (y0 / imgHeight) * 100 + "%";
+      span.style.width = ((x1 - x0) / imgWidth) * 100 + "%";
+      span.style.height = ((y1 - y0) / imgHeight) * 100 + "%";
+      overlay.appendChild(span);
+      overlay.appendChild(document.createTextNode(" "));
+    });
+    overlay.appendChild(document.createTextNode("\n"));
+  });
+}
+
+// Fluxo rápido: seleciona um trecho do texto reconhecido (na foto ou no texto puro) e toca no
+// campo — sem trocar de tela, sem recarregar nada. Repete pra cada campo até preencher tudo.
+// No celular, tocar num botão pode fazer o navegador limpar a seleção de texto antes do clique
+// "oficial" disparar — por isso capturamos o texto selecionado já no toque inicial (pointerdown),
+// com preventDefault pra impedir que o botão roube a seleção antes da hora.
 document.querySelectorAll(".ocr-assign-btn").forEach((btn) => {
+  let textoCapturado = "";
+  btn.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    textoCapturado = window.getSelection().toString().trim();
+  });
   btn.addEventListener("click", () => {
-    const selecionado = window.getSelection().toString().trim();
-    if (!selecionado) { toast("Selecione um trecho do texto reconhecido primeiro."); return; }
+    if (!textoCapturado) { toast("Selecione um trecho do texto reconhecido primeiro."); return; }
     const campo = $(btn.dataset.field);
-    campo.value = selecionado;
+    campo.value = textoCapturado;
     campo.classList.add("ocr-assigned-flash");
     setTimeout(() => campo.classList.remove("ocr-assigned-flash"), 500);
   });

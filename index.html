@@ -66,10 +66,12 @@
     </div>
 
     <div id="ocr-status" class="muted hidden"></div>
-    <img id="foto-preview" class="foto-preview hidden">
+    <div id="foto-preview-wrap" class="hidden">
+      <img id="foto-preview" class="foto-preview">
+      <div id="ocr-overlay"></div>
+    </div>
     <div id="ocr-raw-wrap" class="hidden">
-      <p class="muted">Texto reconhecido — selecione um trecho abaixo e toque no campo pra jogar ele lá:</p>
-      <pre id="ocr-raw-text"></pre>
+      <p class="muted">Arraste o dedo em cima do texto (na foto acima) pra selecionar, depois toque no campo pra jogar ele lá:</p>
       <div class="ocr-assign-row">
         <button type="button" class="btn btn-secondary ocr-assign-btn" data-field="os-numero">→ Nº OS</button>
         <button type="button" class="btn btn-secondary ocr-assign-btn" data-field="os-cliente">→ Cliente</button>
@@ -79,6 +81,7 @@
         <button type="button" class="btn btn-secondary ocr-assign-btn" data-field="os-servico">→ Serviço</button>
         <button type="button" class="btn btn-secondary ocr-assign-btn" data-field="os-obs">→ Obs.</button>
       </div>
+      <pre id="ocr-raw-text" class="hidden"></pre>
     </div>
 
     <form id="form-os">

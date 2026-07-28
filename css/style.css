@@ -142,7 +142,15 @@ form{display:flex; flex-direction:column}
 .tab-btn.active{background:var(--primary); color:white; border-color:var(--primary)}
 .tab-panel{margin-bottom:16px}
 
-.foto-preview{width:100%; border-radius:var(--radius); margin-top:12px}
+.foto-preview{width:100%; border-radius:var(--radius); margin-top:12px; display:block}
+#foto-preview-wrap{position:relative; margin-top:12px}
+#ocr-overlay{position:absolute; inset:0; top:12px}
+.ocr-word{
+  position:absolute; color:transparent; background:transparent;
+  white-space:nowrap; overflow:hidden; cursor:text; font-size:14px; line-height:1;
+  -webkit-user-select:text; user-select:text;
+}
+.ocr-word::selection{background:rgba(61,139,253,.55); color:transparent}
 #ocr-raw-wrap{margin:10px 0; background:var(--card); border-radius:10px; padding:10px; font-size:12px}
 #ocr-raw-wrap pre{
   white-space:pre-wrap; color:var(--text); margin:8px 0 0; max-height:220px; overflow-y:auto;

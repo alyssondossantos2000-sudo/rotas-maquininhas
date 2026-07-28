@@ -47,7 +47,7 @@ async function reduzirImagem(file, maxDim = MAX_DIM_OCR) {
   }
 
   return new Promise((resolve) => {
-    canvas.toBlob((blob) => resolve(blob || file), "image/jpeg", 0.9);
+    canvas.toBlob((blob) => resolve({ blob: blob || file, width: w, height: h }), "image/jpeg", 0.9);
   });
 }
 
@@ -80,10 +80,16 @@ export function warmupOcr(onStatus) {
 }
 
 // OCR no navegador via Tesseract.js (gratuito, sem chave de API).
+// Retorna também a posição de cada linha/palavra reconhecida (em pixels da imagem processada),
+// pra dar pra sobrepor o texto exatamente em cima da foto (estilo Google Lens) e permitir
+// selecionar o texto direto ali, ao invés de só numa caixa de texto separada embaixo.
 export async function runOcr(file, onProgress) {
-  let imagem = file;
+  let imagem = file, imgWidth = null, imgHeight = null;
   try {
-    imagem = await reduzirImagem(file);
+    const reduzida = await reduzirImagem(file);
+    imagem = reduzida.blob;
+    imgWidth = reduzida.width;
+    imgHeight = reduzida.height;
   } catch (err) {
     console.error("Não foi possível reduzir a imagem, usando original:", err);
   }
@@ -97,7 +103,11 @@ export async function runOcr(file, onProgress) {
   try {
     const worker = await warmupOcr(onProgress);
     const { data } = await worker.recognize(imagem);
-    return data.text || "";
+    const linhas = (data.lines || []).map((linha) => ({
+      bbox: linha.bbox,
+      palavras: (linha.words || []).map((w) => ({ text: w.text, bbox: w.bbox })),
+    }));
+    return { text: data.text || "", linhas, imgWidth, imgHeight };
   } finally {
     currentLogCallback = null;
   }
