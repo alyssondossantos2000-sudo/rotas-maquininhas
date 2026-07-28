@@ -1,7 +1,7 @@
-import { supabase } from "./supabaseClient.js?v=8";
-import { geocodeAddress } from "./geocode.js?v=8";
-import { optimizeTrip } from "./osrm.js?v=8";
-import { runOcr, parseOsFields, warmupOcr } from "./ocr.js?v=8";
+import { supabase } from "./supabaseClient.js?v=10";
+import { geocodeAddress } from "./geocode.js?v=10";
+import { optimizeTrip } from "./osrm.js?v=10";
+import { runOcr, parseOsFields, warmupOcr } from "./ocr.js?v=10";
 
 // ---------------------------------------------------------------- state
 let currentUser = null;
@@ -294,11 +294,16 @@ let ultimaOrigemCadastro = "manual";
 
 // Desenha o texto reconhecido em cima da própria foto (estilo Google Lens), já corrigida de
 // rotação: cada palavra vira uma "etiqueta" visível posicionada exatamente onde ela aparece na
-// imagem, selecionável com o dedo, com tamanho de letra ajustado à altura real de cada palavra.
+// imagem, selecionável com o dedo. O tamanho da letra é ÚNICO pra foto inteira (não varia por
+// palavra) — usar a altura da caixa que o Tesseract detectou pra cada palavra parecia mais
+// "preciso", mas numa foto ruim/torta o Tesseract às vezes detecta uma caixa errada (bem alta ou
+// bem baixa), e a fonte proporcional a isso saía gigante cobrindo outro texto, ou minúscula demais
+// pra ler. Um tamanho fixo e legível em toda a foto evita esse problema de vez.
 function renderOcrOverlay(overlay, linhas, imgWidth, imgHeight, previewImgEl) {
   overlay.innerHTML = "";
   const dispH = previewImgEl.clientHeight || imgHeight;
-  const fatorFonte = dispH / imgHeight;
+  const fontSize = Math.max(11, dispH * 0.018);
+
   linhas.forEach((linha) => {
     linha.palavras.forEach((palavra) => {
       const { x0, y0, x1, y1 } = palavra.bbox;
@@ -312,8 +317,7 @@ function renderOcrOverlay(overlay, linhas, imgWidth, imgHeight, previewImgEl) {
       // overflow:hidden isso CORTAVA o final de palavras compridas ("QUERUBIM" virava "QUERU").
       // Melhor deixar a caixa crescer pro tamanho do texto do que esconder texto reconhecido.
       span.style.minWidth = ((x1 - x0) / imgWidth) * 100 + "%";
-      span.style.height = ((y1 - y0) / imgHeight) * 100 + "%";
-      span.style.fontSize = Math.max(8, (y1 - y0) * fatorFonte * 0.8) + "px";
+      span.style.fontSize = fontSize + "px";
       overlay.appendChild(span);
       overlay.appendChild(document.createTextNode(" "));
     });
@@ -326,8 +330,10 @@ function renderOcrOverlay(overlay, linhas, imgWidth, imgHeight, previewImgEl) {
 // cadastro completo de OS e nas duas telas de "parada rápida". `resolveField` decide onde cada
 // botão de atribuir manda o texto, e `autoFill` decide o que fazer com os campos reconhecidos
 // automaticamente — cada tela resolve isso à sua própria maneira (IDs fixos vs. campos de form).
-function criarCapturaOcr({ fileInputs, previewWrap, previewImg, overlay, statusEl, rawWrap, rawText, opacitySlider, zoomSlider, tipoSelect, resolveField, autoFill }) {
+function criarCapturaOcr({ fileInputs, previewWrap, previewImg, overlay, statusEl, rawWrap, rawText, opacitySlider, zoomSlider, girarBtn, tipoSelect, resolveField, autoFill }) {
   let ultimoOcr = null; // {linhas, imgWidth, imgHeight} — guardado pra poder redesenhar o overlay quando o zoom muda
+  let arquivoAtual = null; // guardado pra dar pra "Girar" reprocessar sem pedir a foto de novo
+  let rotacaoManual = 0;
 
   const resetZoom = () => {
     if (!zoomSlider) return;
@@ -336,19 +342,18 @@ function criarCapturaOcr({ fileInputs, previewWrap, previewImg, overlay, statusE
     if (inner) inner.style.width = "100%";
   };
 
-  const onFileChange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
+  // Compartilhado entre "escolher foto" e "girar" (que reprocessa o mesmo arquivo com uma
+  // rotação manual a mais) — o detector automático de orientação (OSD do Tesseract) às vezes erra
+  // em foto com fundo bagunçado ou pouco contraste, e não tem como saber isso sem o usuário olhar.
+  const processarArquivo = async (file) => {
     previewWrap.classList.remove("hidden");
     overlay.innerHTML = "";
     statusEl.classList.remove("hidden");
     statusEl.textContent = "Preparando...";
     ultimoOcr = null;
-    resetZoom();
 
     try {
-      const { text, linhas, imgWidth, imgHeight, imagemCorrigidaBlob } = await runOcr(file, (msg) => { statusEl.textContent = msg; });
+      const { text, linhas, imgWidth, imgHeight, imagemCorrigidaBlob } = await runOcr(file, (msg) => { statusEl.textContent = msg; }, rotacaoManual);
 
       previewImg.src = URL.createObjectURL(imagemCorrigidaBlob || file);
       await new Promise((resolve) => { previewImg.onload = resolve; previewImg.onerror = resolve; });
@@ -372,10 +377,29 @@ function criarCapturaOcr({ fileInputs, previewWrap, previewImg, overlay, statusE
       console.error(err);
     }
   };
+
+  const onFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    arquivoAtual = file;
+    rotacaoManual = 0;
+    resetZoom();
+    processarArquivo(file);
+  };
   // Câmera e galeria são dois <input type=file> separados (um com capture="environment", outro
   // sem) — depender de um único input pra oferecer as duas opções não é confiável em todo
   // Android (às vezes só abre a galeria direto, sem opção de câmera).
   fileInputs.forEach((input) => input.addEventListener("change", onFileChange));
+
+  // Gira 90° por clique e reprocessa a MESMA foto (recalcula posição de cada palavra do zero —
+  // não dá pra só girar a exibição, porque as caixas do overlay são amarradas ao enquadramento
+  // já corrigido que o Tesseract leu).
+  girarBtn?.addEventListener("click", () => {
+    if (!arquivoAtual) return;
+    rotacaoManual = (rotacaoManual + 90) % 360;
+    resetZoom();
+    processarArquivo(arquivoAtual);
+  });
 
   opacitySlider?.addEventListener("input", () => {
     overlay.style.setProperty("--ocr-overlay-opacity", opacitySlider.value / 100);
@@ -422,6 +446,7 @@ criarCapturaOcr({
   rawText: $("ocr-raw-text"),
   opacitySlider: $("ocr-opacity"),
   zoomSlider: $("foto-zoom"),
+  girarBtn: $("foto-girar"),
   tipoSelect: $("foto-tipo"),
   resolveField: (name) => $(name),
   autoFill: (fields) => {
@@ -454,6 +479,7 @@ criarCapturaOcr({
   rawText: $("qp-ocr-raw-text"),
   opacitySlider: $("qp-ocr-opacity"),
   zoomSlider: $("qp-foto-zoom"),
+  girarBtn: $("qp-foto-girar"),
   tipoSelect: $("qp-foto-tipo"),
   resolveField: (name) => $("form-parada-rapida").elements[name],
   autoFill: (fields) => autoFillParadaRapida($("form-parada-rapida"), fields),
@@ -469,6 +495,7 @@ criarCapturaOcr({
   rawText: $("qpd-ocr-raw-text"),
   opacitySlider: $("qpd-ocr-opacity"),
   zoomSlider: $("qpd-foto-zoom"),
+  girarBtn: $("qpd-foto-girar"),
   tipoSelect: $("qpd-foto-tipo"),
   resolveField: (name) => $("form-parada-rapida-detalhe").elements[name],
   autoFill: (fields) => autoFillParadaRapida($("form-parada-rapida-detalhe"), fields),

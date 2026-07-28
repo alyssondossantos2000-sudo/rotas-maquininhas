@@ -34,6 +34,62 @@ function canvasParaBlob(canvas, qualidade = 0.9) {
   return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), "image/jpeg", qualidade));
 }
 
+// Gira um canvas (não um bitmap) ao redor do centro, mantendo o mesmo tamanho de saída (o que
+// sobra é cortado) — usado só pra testar ângulos candidatos numa cópia pequena, não pra gerar a
+// imagem final (por isso não se preocupa em redimensionar o canvas de saída).
+function girarCanvasFixo(origem, anguloGraus) {
+  const canvas = document.createElement("canvas");
+  canvas.width = origem.width;
+  canvas.height = origem.height;
+  const ctx = canvas.getContext("2d");
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.rotate((anguloGraus * Math.PI) / 180);
+  ctx.drawImage(origem, -origem.width / 2, -origem.height / 2);
+  return canvas;
+}
+
+// "Projeção horizontal": soma quanto de escuridão (tinta) tem em cada linha de pixels. Quando o
+// texto está alinhado direitinho na horizontal, cada linha de texto vira um pico de escuridão e
+// cada espaço entre linhas vira um vale — a variância dessa soma linha a linha fica alta. Em
+// qualquer outro ângulo as linhas de texto "vazam" umas nas outras e tudo se borra num cinza
+// parecido — variância baixa. Isso dá pra usar como métrica pra achar o ângulo certo sem OCR.
+function projecaoHorizontalVariancia(canvas) {
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width, h = canvas.height;
+  const { data } = ctx.getImageData(0, 0, w, h);
+  const somaLinhas = new Float64Array(h);
+  for (let y = 0; y < h; y++) {
+    let soma = 0;
+    const rowBase = y * w * 4;
+    for (let x = 0; x < w; x++) {
+      const i = rowBase + x * 4;
+      soma += 255 - (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
+    }
+    somaLinhas[y] = soma;
+  }
+  let media = 0;
+  for (let y = 0; y < h; y++) media += somaLinhas[y];
+  media /= h;
+  let variancia = 0;
+  for (let y = 0; y < h; y++) { const d = somaLinhas[y] - media; variancia += d * d; }
+  return variancia / h;
+}
+
+// Papel fotografado a mão raramente fica perfeitamente reto — e mesmo poucos graus de inclinação
+// já atrapalham MUITO o reconhecimento (o Tesseract lê ao longo da linha assumindo que ela é
+// horizontal). A correção de 90/180/270 acima não resolve isso: uma folha torta uns 15-25° continua
+// sendo classificada como "mais perto de 0°" pelo detector de orientação. Aqui procuramos, numa
+// cópia pequena (rápido), o ângulo fino que deixa as linhas de texto mais horizontais possível.
+function detectarInclinacaoFina(bitmap, correcaoGrosseira) {
+  const base = desenharGirado(bitmap, correcaoGrosseira, 500);
+  let melhorAngulo = 0, melhorVariancia = -1;
+  for (let a = -20; a <= 20; a += 1) {
+    const variancia = projecaoHorizontalVariancia(girarCanvasFixo(base, a));
+    if (variancia > melhorVariancia) { melhorVariancia = variancia; melhorAngulo = a; }
+  }
+  return melhorAngulo;
+}
+
 // Fotos tiradas "de lado" ou "de cabeça pra baixo" (comum quando se fotografa um papel deitado,
 // sem girar o celular) deixam o Tesseract praticamente cego. Detectamos o ângulo com um worker
 // leve e específico pra isso (OSD) antes de rodar a leitura de verdade, e corrigimos a imagem.
@@ -63,12 +119,20 @@ async function detectarAngulo(bitmap) {
   return 0;
 }
 
-async function processarImagem(file, maxDim = MAX_DIM_OCR, onProgress) {
+// `rotacaoManual` (0/90/180/270, opcional): o detector automático (OSD do Tesseract) às vezes erra
+// — em foto com fundo bagunçado ou pouco contraste ele pode "ter certeza" da orientação errada, ou
+// não achar confiança nenhuma e não corrigir nada. Um botão "Girar" na tela deixa o usuário corrigir
+// na mão quando isso acontece, sem depender do algoritmo acertar.
+async function processarImagem(file, maxDim = MAX_DIM_OCR, onProgress, rotacaoManual = 0) {
   const bitmap = await createImageBitmap(file);
 
   onProgress?.("Verificando orientação da foto...");
   const anguloDetectado = await detectarAngulo(bitmap);
-  const correcao = anguloDetectado ? (360 - anguloDetectado) % 360 : 0;
+  const correcaoGrosseira = anguloDetectado ? (360 - anguloDetectado) % 360 : 0;
+
+  onProgress?.("Corrigindo inclinação da foto...");
+  const anguloFino = detectarInclinacaoFina(bitmap, correcaoGrosseira);
+  const correcao = correcaoGrosseira + anguloFino + rotacaoManual;
 
   const canvas = desenharGirado(bitmap, correcao, maxDim);
   bitmap.close?.();
@@ -110,10 +174,10 @@ export function warmupOcr(onStatus) {
 // foto tirada de lado/de cabeça pra baixo, e retorna a posição de cada linha/palavra reconhecida
 // (em pixels da imagem já corrigida), pra dar pra sobrepor o texto exatamente em cima da foto
 // (estilo Google Lens) e permitir selecionar/conferir o texto direto ali.
-export async function runOcr(file, onProgress) {
+export async function runOcr(file, onProgress, rotacaoManual = 0) {
   let imagem = file, imgWidth = null, imgHeight = null, imagemCorrigidaBlob = null;
   try {
-    const processada = await processarImagem(file, MAX_DIM_OCR, onProgress);
+    const processada = await processarImagem(file, MAX_DIM_OCR, onProgress, rotacaoManual);
     imagem = processada.blob;
     imagemCorrigidaBlob = processada.blob;
     imgWidth = processada.width;

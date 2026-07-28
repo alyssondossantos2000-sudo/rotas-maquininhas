@@ -9,7 +9,7 @@
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/icon.svg">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="css/style.css?v=8">
+<link rel="stylesheet" href="css/style.css?v=10">
 </head>
 <body>
 
@@ -93,6 +93,7 @@
     <div id="foto-preview-wrap" class="foto-preview-wrap hidden">
       <div class="foto-zoom-toolbar">🔍 Zoom pra selecionar melhor
         <input type="range" id="foto-zoom" min="100" max="300" value="100" step="25">
+        <button type="button" id="foto-girar" class="btn btn-secondary btn-girar">🔄 Girar</button>
       </div>
       <div class="foto-zoom-scroll">
         <div class="foto-zoom-inner">
@@ -190,6 +191,7 @@
       <div id="qp-foto-preview-wrap" class="foto-preview-wrap hidden">
         <div class="foto-zoom-toolbar">🔍 Zoom pra selecionar melhor
           <input type="range" id="qp-foto-zoom" min="100" max="300" value="100" step="25">
+          <button type="button" id="qp-foto-girar" class="btn btn-secondary btn-girar">🔄 Girar</button>
         </div>
         <div class="foto-zoom-scroll">
           <div class="foto-zoom-inner">
@@ -269,6 +271,7 @@
       <div id="qpd-foto-preview-wrap" class="foto-preview-wrap hidden">
         <div class="foto-zoom-toolbar">🔍 Zoom pra selecionar melhor
           <input type="range" id="qpd-foto-zoom" min="100" max="300" value="100" step="25">
+          <button type="button" id="qpd-foto-girar" class="btn btn-secondary btn-girar">🔄 Girar</button>
         </div>
         <div class="foto-zoom-scroll">
           <div class="foto-zoom-inner">
@@ -336,6 +339,6 @@
 <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
-<script type="module" src="js/app.js?v=8"></script>
+<script type="module" src="js/app.js?v=10"></script>
 </body>
 </html>
