@@ -1,7 +1,7 @@
-import { supabase } from "./supabaseClient.js?v=13";
-import { geocodeAddress } from "./geocode.js?v=13";
-import { optimizeTrip } from "./osrm.js?v=13";
-import { criarCapturaDocumento, prepararPipeline } from "./ui/capture.js?v=13";
+import { supabase } from "./supabaseClient.js?v=14";
+import { geocodeAddress } from "./geocode.js?v=14";
+import { optimizeTrip } from "./osrm.js?v=14";
+import { criarCapturaDocumento, prepararPipeline } from "./ui/capture.js?v=14";
 
 // ---------------------------------------------------------------- state
 let currentUser = null;
@@ -922,7 +922,12 @@ $("btn-rota-voltar").addEventListener("click", () => { showView("rotas-list"); l
 // ---------------------------------------------------------------- go
 init();
 
-if ("serviceWorker" in navigator) {
+// Service worker é coisa de PWA instalável no navegador (cache offline, "adicionar à tela
+// inicial") — dentro do app nativo (Capacitor/APK) o WebView já serve os arquivos localmente, e
+// registrar o service worker ali só arriscaria confundir cache com o jeito que o Capacitor entrega
+// os assets. `window.Capacitor?.isNativePlatform?.()` existe só quando rodando dentro do app nativo.
+const dentroDoApp = window.Capacitor?.isNativePlatform?.() === true;
+if (!dentroDoApp && "serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("service-worker.js").catch(() => {});
   });

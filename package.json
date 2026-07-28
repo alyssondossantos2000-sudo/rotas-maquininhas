@@ -1,0 +1,26 @@
+{
+  "name": "rotasmaquininhas",
+  "version": "1.0.0",
+  "description": "App para cadastrar OS (ordens de serviço) de instalação/manutenção de maquininhas e montar rotas de entrega otimizadas. Funciona no celular como um app (PWA), sem precisar pagar mensalidade de servidor.",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build-www.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alyssondossantos2000-sudo/rotas-maquininhas.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/alyssondossantos2000-sudo/rotas-maquininhas/issues"
+  },
+  "homepage": "https://github.com/alyssondossantos2000-sudo/rotas-maquininhas#readme",
+  "dependencies": {
+    "@capacitor/android": "^8.4.2",
+    "@capacitor/cli": "^8.4.2",
+    "@capacitor/core": "^8.4.2"
+  }
+}

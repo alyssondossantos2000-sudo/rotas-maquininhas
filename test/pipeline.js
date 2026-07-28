@@ -2,8 +2,8 @@
 // fotos-teste/. É uma página HTML (não Node) de propósito: o pipeline depende de APIs só de
 // navegador (Canvas, OpenCV.js/WASM, Tesseract no navegador) que não existem em Node sem shims
 // pesados que fugiriam do ambiente real onde o app roda de verdade.
-import { processarPipeline } from "../js/ui/capture.js?v=13";
-import { interpretarDocumento, paraCamposDeOs } from "../js/interpret/documentInterpreter.js?v=13";
+import { processarPipeline } from "../js/ui/capture.js?v=14";
+import { interpretarDocumento, paraCamposDeOs } from "../js/interpret/documentInterpreter.js?v=14";
 
 const FOTOS = [
   "20260727_215244.jpg", "20260727_215323.jpg", "20260727_215356.jpg", "20260727_215431.jpg",

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Rotas Maquininhas</string>
+    <string name="title_activity_main">Rotas Maquininhas</string>
+    <string name="package_name">com.rotasmaquininhas.app</string>
+    <string name="custom_url_scheme">com.rotasmaquininhas.app</string>
+</resources>
