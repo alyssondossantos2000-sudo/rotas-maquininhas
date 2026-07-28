@@ -27,18 +27,93 @@ function aplicarCinzaEContraste(ctx, w, h) {
   ctx.putImageData(imgData, 0, 0);
 }
 
-async function reduzirImagem(file, maxDim = MAX_DIM_OCR) {
-  const bitmap = await createImageBitmap(file);
+// Desenha o bitmap num canvas girado pelos graus indicados (sentido horário), com o maior lado
+// limitado a maxDim. Usado tanto pra pré-visualização rápida (detecção de rotação) quanto pra
+// gerar a imagem final já endireitada.
+function desenharGirado(bitmap, anguloGraus, maxDim) {
+  const inverte = anguloGraus === 90 || anguloGraus === 270;
   const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
-  const w = Math.round(bitmap.width * scale);
-  const h = Math.round(bitmap.height * scale);
+  const drawW = Math.round(bitmap.width * scale);
+  const drawH = Math.round(bitmap.height * scale);
 
   const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
+  canvas.width = inverte ? drawH : drawW;
+  canvas.height = inverte ? drawW : drawH;
   const ctx = canvas.getContext("2d");
-  ctx.drawImage(bitmap, 0, 0, w, h);
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.rotate((anguloGraus * Math.PI) / 180);
+  ctx.drawImage(bitmap, -drawW / 2, -drawH / 2, drawW, drawH);
+  return canvas;
+}
+
+function canvasParaBlob(canvas, qualidade = 0.9) {
+  return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), "image/jpeg", qualidade));
+}
+
+// Fotos tiradas "de lado" ou "de cabeça pra baixo" (comum quando se fotografa um papel deitado,
+// sem girar o celular) deixam o Tesseract praticamente cego. Detectamos o ângulo com um worker
+// leve e específico pra isso (OSD) antes de rodar a leitura de verdade, e corrigimos a imagem.
+let osdWorkerPromise = null;
+function getOsdWorker() {
+  if (!osdWorkerPromise) {
+    osdWorkerPromise = Tesseract.createWorker("osd", 0, {}).catch((err) => {
+      osdWorkerPromise = null;
+      throw err;
+    });
+  }
+  return osdWorkerPromise;
+}
+
+async function detectarAngulo(bitmap) {
+  try {
+    const worker = await getOsdWorker();
+    const canvasTeste = desenharGirado(bitmap, 0, 1200);
+    const blobTeste = await canvasParaBlob(canvasTeste, 0.8);
+    const { data } = await worker.detect(blobTeste);
+    if (data.orientation_confidence >= 1 && [0, 90, 180, 270].includes(data.orientation_degrees)) {
+      return data.orientation_degrees;
+    }
+  } catch (err) {
+    console.error("Não foi possível detectar a rotação da foto:", err);
+  }
+  return 0;
+}
+
+// Converte pra tons de cinza e "estica" o contraste (o pixel mais escuro vira preto, o mais claro
+// vira branco) — isso ajuda MUITO o Tesseract a ler foto de papel com sombra/pouca luz, sem o
+// risco de um threshold fixo (preto/branco bruto) que pode arruinar partes com iluminação desigual.
+function aplicarCinzaEContraste(ctx, w, h) {
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const px = imgData.data;
+  const cinzas = new Uint8ClampedArray(w * h);
+
+  let min = 255, max = 0;
+  for (let i = 0, j = 0; i < px.length; i += 4, j++) {
+    const cinza = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+    cinzas[j] = cinza;
+    if (cinza < min) min = cinza;
+    if (cinza > max) max = cinza;
+  }
+
+  const range = Math.max(1, max - min);
+  for (let i = 0, j = 0; i < px.length; i += 4, j++) {
+    const v = ((cinzas[j] - min) / range) * 255;
+    px[i] = px[i + 1] = px[i + 2] = v;
+  }
+  ctx.putImageData(imgData, 0, 0);
+}
+
+async function processarImagem(file, maxDim = MAX_DIM_OCR, onProgress) {
+  const bitmap = await createImageBitmap(file);
+
+  onProgress?.("Verificando orientação da foto...");
+  const anguloDetectado = await detectarAngulo(bitmap);
+  const correcao = anguloDetectado ? (360 - anguloDetectado) % 360 : 0;
+
+  const canvas = desenharGirado(bitmap, correcao, maxDim);
   bitmap.close?.();
+  const w = canvas.width, h = canvas.height;
+  const ctx = canvas.getContext("2d");
 
   try {
     aplicarCinzaEContraste(ctx, w, h);
@@ -46,9 +121,8 @@ async function reduzirImagem(file, maxDim = MAX_DIM_OCR) {
     console.error("Não foi possível melhorar o contraste da imagem:", err);
   }
 
-  return new Promise((resolve) => {
-    canvas.toBlob((blob) => resolve({ blob: blob || file, width: w, height: h }), "image/jpeg", 0.9);
-  });
+  const blob = await canvasParaBlob(canvas, 0.9);
+  return { blob: blob || file, width: w, height: h, anguloCorrigido: correcao };
 }
 
 // O motor do Tesseract.js baixa ~2-3MB de "dicionário" de português e inicializa o mecanismo
@@ -79,19 +153,20 @@ export function warmupOcr(onStatus) {
   return workerPromise;
 }
 
-// OCR no navegador via Tesseract.js (gratuito, sem chave de API).
-// Retorna também a posição de cada linha/palavra reconhecida (em pixels da imagem processada),
-// pra dar pra sobrepor o texto exatamente em cima da foto (estilo Google Lens) e permitir
-// selecionar o texto direto ali, ao invés de só numa caixa de texto separada embaixo.
+// OCR no navegador via Tesseract.js (gratuito, sem chave de API). Detecta e corrige automaticamente
+// foto tirada de lado/de cabeça pra baixo, e retorna a posição de cada linha/palavra reconhecida
+// (em pixels da imagem já corrigida), pra dar pra sobrepor o texto exatamente em cima da foto
+// (estilo Google Lens) e permitir selecionar/conferir o texto direto ali.
 export async function runOcr(file, onProgress) {
-  let imagem = file, imgWidth = null, imgHeight = null;
+  let imagem = file, imgWidth = null, imgHeight = null, imagemCorrigidaBlob = null;
   try {
-    const reduzida = await reduzirImagem(file);
-    imagem = reduzida.blob;
-    imgWidth = reduzida.width;
-    imgHeight = reduzida.height;
+    const processada = await processarImagem(file, MAX_DIM_OCR, onProgress);
+    imagem = processada.blob;
+    imagemCorrigidaBlob = processada.blob;
+    imgWidth = processada.width;
+    imgHeight = processada.height;
   } catch (err) {
-    console.error("Não foi possível reduzir a imagem, usando original:", err);
+    console.error("Não foi possível processar a imagem, usando original:", err);
   }
 
   currentLogCallback = (m) => {
@@ -107,7 +182,7 @@ export async function runOcr(file, onProgress) {
       bbox: linha.bbox,
       palavras: (linha.words || []).map((w) => ({ text: w.text, bbox: w.bbox })),
     }));
-    return { text: data.text || "", linhas, imgWidth, imgHeight };
+    return { text: data.text || "", linhas, imgWidth, imgHeight, imagemCorrigidaBlob };
   } finally {
     currentLogCallback = null;
   }

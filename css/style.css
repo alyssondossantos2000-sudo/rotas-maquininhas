@@ -143,16 +143,19 @@ form{display:flex; flex-direction:column}
 .tab-panel{margin-bottom:16px}
 
 .foto-preview{width:100%; border-radius:var(--radius); margin-top:12px; display:block}
-#foto-preview-wrap{position:relative; margin-top:12px}
-#ocr-overlay{position:absolute; inset:0; top:12px}
+.foto-preview-wrap{position:relative; margin-top:12px; line-height:0}
+.ocr-overlay{position:absolute; inset:0; top:12px; --ocr-overlay-opacity:0.85}
 .ocr-word{
-  position:absolute; color:transparent; background:transparent;
-  white-space:nowrap; overflow:hidden; cursor:text; font-size:14px; line-height:1;
+  position:absolute; white-space:nowrap; overflow:hidden; cursor:text; line-height:1.15;
+  font-weight:700; color:#eaf1ff; background:rgba(15,23,42,.72);
+  opacity:var(--ocr-overlay-opacity); border-radius:2px; padding:0 1px;
   -webkit-user-select:text; user-select:text;
 }
-.ocr-word::selection{background:rgba(61,139,253,.55); color:transparent}
-#ocr-raw-wrap{margin:10px 0; background:var(--card); border-radius:10px; padding:10px; font-size:12px}
-#ocr-raw-wrap pre{
+.ocr-word::selection{background:rgba(61,139,253,.85); color:white}
+.ocr-opacity-label{display:flex; align-items:center; gap:10px; font-size:12px; color:var(--muted); margin-bottom:10px}
+.ocr-opacity-label input[type=range]{flex:1}
+.ocr-raw-wrap{margin:10px 0; background:var(--card); border-radius:10px; padding:10px; font-size:12px}
+.ocr-raw-wrap pre{
   white-space:pre-wrap; color:var(--text); margin:8px 0 0; max-height:220px; overflow-y:auto;
   -webkit-user-select:text; user-select:text; padding:8px; background:var(--card-2); border-radius:8px;
 }

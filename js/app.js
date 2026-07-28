@@ -1,7 +1,7 @@
-import { supabase } from "./supabaseClient.js";
-import { geocodeAddress } from "./geocode.js";
-import { optimizeTrip } from "./osrm.js";
-import { runOcr, parseOsFields, warmupOcr } from "./ocr.js";
+import { supabase } from "./supabaseClient.js?v=6";
+import { geocodeAddress } from "./geocode.js?v=6";
+import { optimizeTrip } from "./osrm.js?v=6";
+import { runOcr, parseOsFields, warmupOcr } from "./ocr.js?v=6";
 
 // ---------------------------------------------------------------- state
 let currentUser = null;
@@ -292,51 +292,13 @@ function switchTab(tab) {
 
 let ultimaOrigemCadastro = "manual";
 
-$("foto-input").addEventListener("change", async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  ultimaOrigemCadastro = "foto";
-
-  const preview = $("foto-preview");
-  preview.src = URL.createObjectURL(file);
-  $("foto-preview-wrap").classList.remove("hidden");
-  $("ocr-overlay").innerHTML = "";
-
-  const statusEl = $("ocr-status");
-  statusEl.classList.remove("hidden");
-  statusEl.textContent = "Preparando...";
-
-  try {
-    const { text, linhas, imgWidth, imgHeight } = await runOcr(file, (msg) => { statusEl.textContent = msg; });
-    statusEl.textContent = "Leitura concluída — selecione o texto na foto ou confira os campos abaixo.";
-    const fields = parseOsFields(text);
-    if (fields.numero_os) $("os-numero").value = fields.numero_os;
-    if (fields.nome_cliente) $("os-cliente").value = fields.nome_cliente;
-    if (fields.endereco) $("os-endereco").value = fields.endereco;
-    if (fields.contato) $("os-contato").value = fields.contato;
-    if (fields.banco) $("os-banco").value = fields.banco;
-    if (fields.servico) $("os-servico").value = fields.servico;
-
-    $("ocr-raw-wrap").classList.remove("hidden");
-    if (linhas && linhas.length && imgWidth && imgHeight) {
-      renderOcrOverlay(linhas, imgWidth, imgHeight);
-      $("ocr-raw-text").classList.add("hidden");
-    } else {
-      // Sem posição das palavras (ex: imagem não pôde ser reduzida) — mostra o texto puro como reserva.
-      $("ocr-raw-text").textContent = text.trim() || "(nada reconhecido)";
-      $("ocr-raw-text").classList.remove("hidden");
-    }
-  } catch (err) {
-    statusEl.textContent = "Não consegui ler a foto. Preencha manualmente.";
-    console.error(err);
-  }
-});
-
-// Desenha o texto reconhecido em cima da própria foto (estilo Google Lens): cada palavra vira um
-// texto invisível posicionado exatamente onde ela aparece na imagem, selecionável com o dedo.
-function renderOcrOverlay(linhas, imgWidth, imgHeight) {
-  const overlay = $("ocr-overlay");
+// Desenha o texto reconhecido em cima da própria foto (estilo Google Lens), já corrigida de
+// rotação: cada palavra vira uma "etiqueta" visível posicionada exatamente onde ela aparece na
+// imagem, selecionável com o dedo, com tamanho de letra ajustado à altura real de cada palavra.
+function renderOcrOverlay(overlay, linhas, imgWidth, imgHeight, previewImgEl) {
   overlay.innerHTML = "";
+  const dispH = previewImgEl.clientHeight || imgHeight;
+  const fatorFonte = dispH / imgHeight;
   linhas.forEach((linha) => {
     linha.palavras.forEach((palavra) => {
       const { x0, y0, x1, y1 } = palavra.bbox;
@@ -347,6 +309,7 @@ function renderOcrOverlay(linhas, imgWidth, imgHeight) {
       span.style.top = (y0 / imgHeight) * 100 + "%";
       span.style.width = ((x1 - x0) / imgWidth) * 100 + "%";
       span.style.height = ((y1 - y0) / imgHeight) * 100 + "%";
+      span.style.fontSize = Math.max(8, (y1 - y0) * fatorFonte * 0.8) + "px";
       overlay.appendChild(span);
       overlay.appendChild(document.createTextNode(" "));
     });
@@ -354,24 +317,129 @@ function renderOcrOverlay(linhas, imgWidth, imgHeight) {
   });
 }
 
-// Fluxo rápido: seleciona um trecho do texto reconhecido (na foto ou no texto puro) e toca no
-// campo — sem trocar de tela, sem recarregar nada. Repete pra cada campo até preencher tudo.
-// No celular, tocar num botão pode fazer o navegador limpar a seleção de texto antes do clique
-// "oficial" disparar — por isso capturamos o texto selecionado já no toque inicial (pointerdown),
-// com preventDefault pra impedir que o botão roube a seleção antes da hora.
-document.querySelectorAll(".ocr-assign-btn").forEach((btn) => {
-  let textoCapturado = "";
-  btn.addEventListener("pointerdown", (e) => {
-    e.preventDefault();
-    textoCapturado = window.getSelection().toString().trim();
+// Monta um "capturador de foto com OCR" completo (botão de foto, prévia + sobreposição estilo
+// Lens, controle de opacidade, botões de atribuir texto pra campo) reutilizado em 3 lugares:
+// cadastro completo de OS e nas duas telas de "parada rápida". `resolveField` decide onde cada
+// botão de atribuir manda o texto, e `autoFill` decide o que fazer com os campos reconhecidos
+// automaticamente — cada tela resolve isso à sua própria maneira (IDs fixos vs. campos de form).
+function criarCapturaOcr({ fileInputs, previewWrap, previewImg, overlay, statusEl, rawWrap, rawText, opacitySlider, resolveField, autoFill }) {
+  const onFileChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    previewWrap.classList.remove("hidden");
+    overlay.innerHTML = "";
+    statusEl.classList.remove("hidden");
+    statusEl.textContent = "Preparando...";
+
+    try {
+      const { text, linhas, imgWidth, imgHeight, imagemCorrigidaBlob } = await runOcr(file, (msg) => { statusEl.textContent = msg; });
+
+      previewImg.src = URL.createObjectURL(imagemCorrigidaBlob || file);
+      await new Promise((resolve) => { previewImg.onload = resolve; previewImg.onerror = resolve; });
+
+      statusEl.textContent = "Leitura concluída — selecione o texto na foto ou confira os campos.";
+      autoFill(parseOsFields(text));
+
+      rawWrap.classList.remove("hidden");
+      if (linhas && linhas.length && imgWidth && imgHeight) {
+        renderOcrOverlay(overlay, linhas, imgWidth, imgHeight, previewImg);
+        overlay.style.setProperty("--ocr-overlay-opacity", (opacitySlider?.value ?? 85) / 100);
+        rawText.classList.add("hidden");
+      } else {
+        // Sem posição das palavras (ex: imagem não pôde ser processada) — mostra o texto puro como reserva.
+        rawText.textContent = text.trim() || "(nada reconhecido)";
+        rawText.classList.remove("hidden");
+      }
+    } catch (err) {
+      statusEl.textContent = "Não consegui ler a foto. Preencha manualmente.";
+      console.error(err);
+    }
+  };
+  // Câmera e galeria são dois <input type=file> separados (um com capture="environment", outro
+  // sem) — depender de um único input pra oferecer as duas opções não é confiável em todo
+  // Android (às vezes só abre a galeria direto, sem opção de câmera).
+  fileInputs.forEach((input) => input.addEventListener("change", onFileChange));
+
+  opacitySlider?.addEventListener("input", () => {
+    overlay.style.setProperty("--ocr-overlay-opacity", opacitySlider.value / 100);
   });
-  btn.addEventListener("click", () => {
-    if (!textoCapturado) { toast("Selecione um trecho do texto reconhecido primeiro."); return; }
-    const campo = $(btn.dataset.field);
-    campo.value = textoCapturado;
-    campo.classList.add("ocr-assigned-flash");
-    setTimeout(() => campo.classList.remove("ocr-assigned-flash"), 500);
+
+  // Fluxo rápido: seleciona um trecho do texto reconhecido (na foto ou no texto puro) e toca no
+  // campo — sem trocar de tela, sem recarregar nada. No celular, tocar num botão pode fazer o
+  // navegador limpar a seleção de texto antes do clique "oficial" disparar — por isso capturamos
+  // o texto já no toque inicial (pointerdown), com preventDefault pra não perder a seleção.
+  rawWrap.querySelectorAll(".ocr-assign-btn").forEach((btn) => {
+    let textoCapturado = "";
+    btn.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      textoCapturado = window.getSelection().toString().trim();
+    });
+    btn.addEventListener("click", () => {
+      if (!textoCapturado) { toast("Selecione um trecho do texto reconhecido primeiro."); return; }
+      const campo = resolveField(btn.dataset.field);
+      if (!campo) return;
+      campo.value = textoCapturado;
+      campo.classList.add("ocr-assigned-flash");
+      setTimeout(() => campo.classList.remove("ocr-assigned-flash"), 500);
+    });
   });
+}
+
+criarCapturaOcr({
+  fileInputs: [$("foto-input-camera"), $("foto-input-galeria")],
+  previewWrap: $("foto-preview-wrap"),
+  previewImg: $("foto-preview"),
+  overlay: $("ocr-overlay"),
+  statusEl: $("ocr-status"),
+  rawWrap: $("ocr-raw-wrap"),
+  rawText: $("ocr-raw-text"),
+  opacitySlider: $("ocr-opacity"),
+  resolveField: (name) => $(name),
+  autoFill: (fields) => {
+    ultimaOrigemCadastro = "foto";
+    if (fields.numero_os) $("os-numero").value = fields.numero_os;
+    if (fields.nome_cliente) $("os-cliente").value = fields.nome_cliente;
+    if (fields.endereco) $("os-endereco").value = fields.endereco;
+    if (fields.contato) $("os-contato").value = fields.contato;
+    if (fields.banco) $("os-banco").value = fields.banco;
+    if (fields.servico) $("os-servico").value = fields.servico;
+  },
+});
+
+function autoFillParadaRapida(form, fields) {
+  origemPorFormulario.set(form, "foto");
+  if (fields.nome_cliente) form.elements.cliente.value = fields.nome_cliente;
+  if (fields.endereco) form.elements.endereco.value = fields.endereco;
+  if (fields.contato) form.elements.contato.value = fields.contato;
+  if (fields.banco) form.elements.maquina.value = fields.banco;
+  if (fields.servico) form.elements.servico.value = fields.servico;
+}
+
+criarCapturaOcr({
+  fileInputs: [$("qp-foto-input-camera"), $("qp-foto-input-galeria")],
+  previewWrap: $("qp-foto-preview-wrap"),
+  previewImg: $("qp-foto-preview"),
+  overlay: $("qp-ocr-overlay"),
+  statusEl: $("qp-ocr-status"),
+  rawWrap: $("qp-ocr-raw-wrap"),
+  rawText: $("qp-ocr-raw-text"),
+  opacitySlider: $("qp-ocr-opacity"),
+  resolveField: (name) => $("form-parada-rapida").elements[name],
+  autoFill: (fields) => autoFillParadaRapida($("form-parada-rapida"), fields),
+});
+
+criarCapturaOcr({
+  fileInputs: [$("qpd-foto-input-camera"), $("qpd-foto-input-galeria")],
+  previewWrap: $("qpd-foto-preview-wrap"),
+  previewImg: $("qpd-foto-preview"),
+  overlay: $("qpd-ocr-overlay"),
+  statusEl: $("qpd-ocr-status"),
+  rawWrap: $("qpd-ocr-raw-wrap"),
+  rawText: $("qpd-ocr-raw-text"),
+  opacitySlider: $("qpd-ocr-opacity"),
+  resolveField: (name) => $("form-parada-rapida-detalhe").elements[name],
+  autoFill: (fields) => autoFillParadaRapida($("form-parada-rapida-detalhe"), fields),
 });
 
 $("form-os").addEventListener("submit", async (e) => {
@@ -490,6 +558,12 @@ async function openRotaBuild() {
   $("rota-build-status").textContent = "";
   $("form-parada-rapida").reset();
   $("form-parada-rapida").querySelector(".qp-status").textContent = "";
+  $("parada-rapida-build-wrap").classList.add("hidden");
+  $("qp-foto-preview-wrap").classList.add("hidden");
+  $("qp-ocr-overlay").innerHTML = "";
+  $("qp-ocr-raw-wrap").classList.add("hidden");
+  $("qp-ocr-raw-text").classList.add("hidden");
+  $("qp-ocr-status").classList.add("hidden");
 
   const { data, error } = await supabase.from("ordens_servico").select("*").eq("status", "pendente").order("created_at", { ascending: false });
   if (error) { toast("Erro ao carregar OS pendentes: " + error.message); return; }
@@ -503,7 +577,10 @@ async function openRotaBuild() {
 
 // Formulário de "parada rápida": cria uma OS com só cliente + endereço obrigatórios (o resto é
 // opcional), usado tanto ao montar uma rota nova quanto para acrescentar parada numa rota já
-// salva. `onAdded(osInserida)` decide o que fazer com a parada criada em cada tela.
+// salva. `onAdded(osInserida)` decide o que fazer com a parada criada em cada tela. Se os campos
+// foram preenchidos por foto (marcado pelo autoFill correspondente), registra a origem certa.
+const origemPorFormulario = new WeakMap();
+
 function wireQuickAddForm(form, onAdded) {
   const statusEl = form.querySelector(".qp-status");
   form.addEventListener("submit", async (e) => {
@@ -528,7 +605,7 @@ function wireQuickAddForm(form, onAdded) {
       contato: form.elements.contato.value.trim(),
       observacoes: form.elements.obs.value.trim(),
       status: "pendente",
-      origem_cadastro: "manual",
+      origem_cadastro: origemPorFormulario.get(form) || "manual",
       lat: geo ? geo.lat : null,
       lng: geo ? geo.lng : null,
       geocode_status: geo ? "ok" : "falhou",
@@ -539,6 +616,7 @@ function wireQuickAddForm(form, onAdded) {
     if (error) { statusEl.textContent = "Erro ao adicionar: " + error.message; return; }
 
     form.reset();
+    origemPorFormulario.set(form, "manual");
     statusEl.textContent = geo ? "Parada adicionada!" : "Parada adicionada, mas não localizei o endereço — ajuste depois em \"OS\" > Editar.";
     await onAdded(inserted);
   });
@@ -548,8 +626,14 @@ wireQuickAddForm($("form-parada-rapida"), async (inserted) => {
   addOsSelectRow(inserted, { checked: true });
 });
 
+$("btn-toggle-parada-rapida-build").addEventListener("click", () => {
+  $("parada-rapida-build-wrap").classList.toggle("hidden");
+  warmupOcr();
+});
+
 $("btn-toggle-parada-rapida").addEventListener("click", () => {
   $("parada-rapida-detalhe-wrap").classList.toggle("hidden");
+  warmupOcr();
 });
 
 wireQuickAddForm($("form-parada-rapida-detalhe"), async (inserted) => {
@@ -747,6 +831,11 @@ async function openRotaDetail(id) {
   detailStops = stops || [];
   $("parada-rapida-detalhe-wrap").classList.add("hidden");
   $("form-parada-rapida-detalhe").reset();
+  $("qpd-foto-preview-wrap").classList.add("hidden");
+  $("qpd-ocr-overlay").innerHTML = "";
+  $("qpd-ocr-raw-wrap").classList.add("hidden");
+  $("qpd-ocr-raw-text").classList.add("hidden");
+  $("qpd-ocr-status").classList.add("hidden");
   renderRotaDetail();
   showView("rota-detail");
 }

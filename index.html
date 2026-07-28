@@ -9,7 +9,7 @@
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/icon.svg">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/style.css?v=6">
 </head>
 <body>
 
@@ -61,16 +61,23 @@
     </div>
 
     <div id="tab-foto" class="tab-panel hidden">
-      <label class="btn btn-secondary btn-block" for="foto-input">📷 Tirar foto / escolher imagem</label>
-      <input type="file" id="foto-input" accept="image/*" class="hidden">
+      <div class="btn-row">
+        <label class="btn btn-secondary" for="foto-input-camera">📷 Tirar foto</label>
+        <label class="btn btn-secondary" for="foto-input-galeria">🖼️ Da galeria</label>
+      </div>
+      <input type="file" id="foto-input-camera" accept="image/*" capture="environment" class="hidden">
+      <input type="file" id="foto-input-galeria" accept="image/*" class="hidden">
     </div>
 
     <div id="ocr-status" class="muted hidden"></div>
-    <div id="foto-preview-wrap" class="hidden">
+    <div id="foto-preview-wrap" class="foto-preview-wrap hidden">
       <img id="foto-preview" class="foto-preview">
-      <div id="ocr-overlay"></div>
+      <div id="ocr-overlay" class="ocr-overlay"></div>
     </div>
-    <div id="ocr-raw-wrap" class="hidden">
+    <div id="ocr-raw-wrap" class="ocr-raw-wrap hidden">
+      <label class="ocr-opacity-label">Opacidade do texto sobreposto na foto
+        <input type="range" id="ocr-opacity" min="0" max="100" value="85">
+      </label>
       <p class="muted">Arraste o dedo em cima do texto (na foto acima) pra selecionar, depois toque no campo pra jogar ele lá:</p>
       <div class="ocr-assign-row">
         <button type="button" class="btn btn-secondary ocr-assign-btn" data-field="os-numero">→ Nº OS</button>
@@ -124,17 +131,46 @@
       </div>
     </label>
 
-    <h3>Adicionar parada rápida</h3>
-    <form id="form-parada-rapida" class="form-parada-rapida">
-      <label>Nome do cliente *<input type="text" name="cliente" required></label>
-      <label>Endereço completo *<textarea name="endereco" rows="2" required placeholder="Rua, número, bairro"></textarea></label>
-      <label>Tipo de serviço<input type="text" name="servico" placeholder="Instalação, troca, manutenção..."></label>
-      <label>Máquina<input type="text" name="maquina" placeholder="Cielo, Stone, Sicredi..."></label>
-      <label>Contato (opcional)<input type="tel" name="contato" placeholder="(67) 91234-5678"></label>
-      <label>Observações (opcional)<textarea name="obs" rows="2"></textarea></label>
-      <button type="submit" class="btn btn-secondary btn-block">+ Adicionar parada</button>
-      <p class="qp-status muted"></p>
-    </form>
+    <button type="button" id="btn-toggle-parada-rapida-build" class="btn btn-secondary btn-block">+ Adicionar parada rápida</button>
+    <div id="parada-rapida-build-wrap" class="hidden">
+      <div class="btn-row">
+        <label class="btn btn-secondary" for="qp-foto-input-camera">📷 Tirar foto</label>
+        <label class="btn btn-secondary" for="qp-foto-input-galeria">🖼️ Da galeria</label>
+      </div>
+      <input type="file" id="qp-foto-input-camera" accept="image/*" capture="environment" class="hidden">
+      <input type="file" id="qp-foto-input-galeria" accept="image/*" class="hidden">
+      <div id="qp-ocr-status" class="muted hidden"></div>
+      <div id="qp-foto-preview-wrap" class="foto-preview-wrap hidden">
+        <img id="qp-foto-preview" class="foto-preview">
+        <div id="qp-ocr-overlay" class="ocr-overlay"></div>
+      </div>
+      <div id="qp-ocr-raw-wrap" class="ocr-raw-wrap hidden">
+        <label class="ocr-opacity-label">Opacidade do texto sobreposto na foto
+          <input type="range" id="qp-ocr-opacity" min="0" max="100" value="85">
+        </label>
+        <p class="muted">Selecione o texto na foto e toque no campo pra jogar ele lá:</p>
+        <div class="ocr-assign-row">
+          <button type="button" class="btn btn-secondary ocr-assign-btn" data-field="cliente">→ Cliente</button>
+          <button type="button" class="btn btn-secondary ocr-assign-btn" data-field="endereco">→ Endereço</button>
+          <button type="button" class="btn btn-secondary ocr-assign-btn" data-field="contato">→ Contato</button>
+          <button type="button" class="btn btn-secondary ocr-assign-btn" data-field="maquina">→ Máquina</button>
+          <button type="button" class="btn btn-secondary ocr-assign-btn" data-field="servico">→ Serviço</button>
+          <button type="button" class="btn btn-secondary ocr-assign-btn" data-field="obs">→ Obs.</button>
+        </div>
+        <pre id="qp-ocr-raw-text" class="hidden"></pre>
+      </div>
+
+      <form id="form-parada-rapida" class="form-parada-rapida">
+        <label>Nome do cliente *<input type="text" name="cliente" required></label>
+        <label>Endereço completo *<textarea name="endereco" rows="2" required placeholder="Rua, número, bairro"></textarea></label>
+        <label>Tipo de serviço<input type="text" name="servico" placeholder="Instalação, troca, manutenção..."></label>
+        <label>Máquina<input type="text" name="maquina" placeholder="Cielo, Stone, Sicredi..."></label>
+        <label>Contato (opcional)<input type="tel" name="contato" placeholder="(67) 91234-5678"></label>
+        <label>Observações (opcional)<textarea name="obs" rows="2"></textarea></label>
+        <button type="submit" class="btn btn-secondary btn-block">+ Adicionar parada</button>
+        <p class="qp-status muted"></p>
+      </form>
+    </div>
 
     <h3>Selecione as OS pendentes</h3>
     <div id="rota-os-select" class="list"></div>
@@ -149,6 +185,33 @@
 
     <button type="button" id="btn-toggle-parada-rapida" class="btn btn-secondary btn-block">+ Adicionar parada nesta rota</button>
     <div id="parada-rapida-detalhe-wrap" class="hidden">
+      <div class="btn-row">
+        <label class="btn btn-secondary" for="qpd-foto-input-camera">📷 Tirar foto</label>
+        <label class="btn btn-secondary" for="qpd-foto-input-galeria">🖼️ Da galeria</label>
+      </div>
+      <input type="file" id="qpd-foto-input-camera" accept="image/*" capture="environment" class="hidden">
+      <input type="file" id="qpd-foto-input-galeria" accept="image/*" class="hidden">
+      <div id="qpd-ocr-status" class="muted hidden"></div>
+      <div id="qpd-foto-preview-wrap" class="foto-preview-wrap hidden">
+        <img id="qpd-foto-preview" class="foto-preview">
+        <div id="qpd-ocr-overlay" class="ocr-overlay"></div>
+      </div>
+      <div id="qpd-ocr-raw-wrap" class="ocr-raw-wrap hidden">
+        <label class="ocr-opacity-label">Opacidade do texto sobreposto na foto
+          <input type="range" id="qpd-ocr-opacity" min="0" max="100" value="85">
+        </label>
+        <p class="muted">Selecione o texto na foto e toque no campo pra jogar ele lá:</p>
+        <div class="ocr-assign-row">
+          <button type="button" class="btn btn-secondary ocr-assign-btn" data-field="cliente">→ Cliente</button>
+          <button type="button" class="btn btn-secondary ocr-assign-btn" data-field="endereco">→ Endereço</button>
+          <button type="button" class="btn btn-secondary ocr-assign-btn" data-field="contato">→ Contato</button>
+          <button type="button" class="btn btn-secondary ocr-assign-btn" data-field="maquina">→ Máquina</button>
+          <button type="button" class="btn btn-secondary ocr-assign-btn" data-field="servico">→ Serviço</button>
+          <button type="button" class="btn btn-secondary ocr-assign-btn" data-field="obs">→ Obs.</button>
+        </div>
+        <pre id="qpd-ocr-raw-text" class="hidden"></pre>
+      </div>
+
       <form id="form-parada-rapida-detalhe" class="form-parada-rapida">
         <label>Nome do cliente *<input type="text" name="cliente" required></label>
         <label>Endereço completo *<textarea name="endereco" rows="2" required placeholder="Rua, número, bairro"></textarea></label>
@@ -192,6 +255,6 @@
 <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
-<script type="module" src="js/app.js"></script>
+<script type="module" src="js/app.js?v=6"></script>
 </body>
 </html>
