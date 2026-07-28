@@ -9,7 +9,7 @@
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/icon.svg">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="css/style.css?v=6">
+<link rel="stylesheet" href="css/style.css?v=7">
 </head>
 <body>
 
@@ -71,8 +71,15 @@
 
     <div id="ocr-status" class="muted hidden"></div>
     <div id="foto-preview-wrap" class="foto-preview-wrap hidden">
-      <img id="foto-preview" class="foto-preview">
-      <div id="ocr-overlay" class="ocr-overlay"></div>
+      <div class="foto-zoom-toolbar">🔍 Zoom pra selecionar melhor
+        <input type="range" id="foto-zoom" min="100" max="300" value="100" step="25">
+      </div>
+      <div class="foto-zoom-scroll">
+        <div class="foto-zoom-inner">
+          <img id="foto-preview" class="foto-preview">
+          <div id="ocr-overlay" class="ocr-overlay"></div>
+        </div>
+      </div>
     </div>
     <div id="ocr-raw-wrap" class="ocr-raw-wrap hidden">
       <label class="ocr-opacity-label">Opacidade do texto sobreposto na foto
@@ -141,8 +148,15 @@
       <input type="file" id="qp-foto-input-galeria" accept="image/*" class="hidden">
       <div id="qp-ocr-status" class="muted hidden"></div>
       <div id="qp-foto-preview-wrap" class="foto-preview-wrap hidden">
-        <img id="qp-foto-preview" class="foto-preview">
-        <div id="qp-ocr-overlay" class="ocr-overlay"></div>
+        <div class="foto-zoom-toolbar">🔍 Zoom pra selecionar melhor
+          <input type="range" id="qp-foto-zoom" min="100" max="300" value="100" step="25">
+        </div>
+        <div class="foto-zoom-scroll">
+          <div class="foto-zoom-inner">
+            <img id="qp-foto-preview" class="foto-preview">
+            <div id="qp-ocr-overlay" class="ocr-overlay"></div>
+          </div>
+        </div>
       </div>
       <div id="qp-ocr-raw-wrap" class="ocr-raw-wrap hidden">
         <label class="ocr-opacity-label">Opacidade do texto sobreposto na foto
@@ -193,8 +207,15 @@
       <input type="file" id="qpd-foto-input-galeria" accept="image/*" class="hidden">
       <div id="qpd-ocr-status" class="muted hidden"></div>
       <div id="qpd-foto-preview-wrap" class="foto-preview-wrap hidden">
-        <img id="qpd-foto-preview" class="foto-preview">
-        <div id="qpd-ocr-overlay" class="ocr-overlay"></div>
+        <div class="foto-zoom-toolbar">🔍 Zoom pra selecionar melhor
+          <input type="range" id="qpd-foto-zoom" min="100" max="300" value="100" step="25">
+        </div>
+        <div class="foto-zoom-scroll">
+          <div class="foto-zoom-inner">
+            <img id="qpd-foto-preview" class="foto-preview">
+            <div id="qpd-ocr-overlay" class="ocr-overlay"></div>
+          </div>
+        </div>
       </div>
       <div id="qpd-ocr-raw-wrap" class="ocr-raw-wrap hidden">
         <label class="ocr-opacity-label">Opacidade do texto sobreposto na foto
@@ -255,6 +276,6 @@
 <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
-<script type="module" src="js/app.js?v=6"></script>
+<script type="module" src="js/app.js?v=7"></script>
 </body>
 </html>

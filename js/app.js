@@ -1,7 +1,7 @@
-import { supabase } from "./supabaseClient.js?v=6";
-import { geocodeAddress } from "./geocode.js?v=6";
-import { optimizeTrip } from "./osrm.js?v=6";
-import { runOcr, parseOsFields, warmupOcr } from "./ocr.js?v=6";
+import { supabase } from "./supabaseClient.js?v=7";
+import { geocodeAddress } from "./geocode.js?v=7";
+import { optimizeTrip } from "./osrm.js?v=7";
+import { runOcr, parseOsFields, warmupOcr } from "./ocr.js?v=7";
 
 // ---------------------------------------------------------------- state
 let currentUser = null;
@@ -307,7 +307,11 @@ function renderOcrOverlay(overlay, linhas, imgWidth, imgHeight, previewImgEl) {
       span.textContent = palavra.text;
       span.style.left = (x0 / imgWidth) * 100 + "%";
       span.style.top = (y0 / imgHeight) * 100 + "%";
-      span.style.width = ((x1 - x0) / imgWidth) * 100 + "%";
+      // Largura NÃO é travada no bbox do Tesseract: a fonte que a gente desenha quase sempre é
+      // mais larga que a caixinha detectada (que é apertada no glifo original), e com
+      // overflow:hidden isso CORTAVA o final de palavras compridas ("QUERUBIM" virava "QUERU").
+      // Melhor deixar a caixa crescer pro tamanho do texto do que esconder texto reconhecido.
+      span.style.minWidth = ((x1 - x0) / imgWidth) * 100 + "%";
       span.style.height = ((y1 - y0) / imgHeight) * 100 + "%";
       span.style.fontSize = Math.max(8, (y1 - y0) * fatorFonte * 0.8) + "px";
       overlay.appendChild(span);
@@ -322,7 +326,16 @@ function renderOcrOverlay(overlay, linhas, imgWidth, imgHeight, previewImgEl) {
 // cadastro completo de OS e nas duas telas de "parada rápida". `resolveField` decide onde cada
 // botão de atribuir manda o texto, e `autoFill` decide o que fazer com os campos reconhecidos
 // automaticamente — cada tela resolve isso à sua própria maneira (IDs fixos vs. campos de form).
-function criarCapturaOcr({ fileInputs, previewWrap, previewImg, overlay, statusEl, rawWrap, rawText, opacitySlider, resolveField, autoFill }) {
+function criarCapturaOcr({ fileInputs, previewWrap, previewImg, overlay, statusEl, rawWrap, rawText, opacitySlider, zoomSlider, resolveField, autoFill }) {
+  let ultimoOcr = null; // {linhas, imgWidth, imgHeight} — guardado pra poder redesenhar o overlay quando o zoom muda
+
+  const resetZoom = () => {
+    if (!zoomSlider) return;
+    zoomSlider.value = 100;
+    const inner = previewImg.closest(".foto-zoom-inner");
+    if (inner) inner.style.width = "100%";
+  };
+
   const onFileChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -331,6 +344,8 @@ function criarCapturaOcr({ fileInputs, previewWrap, previewImg, overlay, statusE
     overlay.innerHTML = "";
     statusEl.classList.remove("hidden");
     statusEl.textContent = "Preparando...";
+    ultimoOcr = null;
+    resetZoom();
 
     try {
       const { text, linhas, imgWidth, imgHeight, imagemCorrigidaBlob } = await runOcr(file, (msg) => { statusEl.textContent = msg; });
@@ -343,6 +358,7 @@ function criarCapturaOcr({ fileInputs, previewWrap, previewImg, overlay, statusE
 
       rawWrap.classList.remove("hidden");
       if (linhas && linhas.length && imgWidth && imgHeight) {
+        ultimoOcr = { linhas, imgWidth, imgHeight };
         renderOcrOverlay(overlay, linhas, imgWidth, imgHeight, previewImg);
         overlay.style.setProperty("--ocr-overlay-opacity", (opacitySlider?.value ?? 85) / 100);
         rawText.classList.add("hidden");
@@ -363,6 +379,16 @@ function criarCapturaOcr({ fileInputs, previewWrap, previewImg, overlay, statusE
 
   opacitySlider?.addEventListener("input", () => {
     overlay.style.setProperty("--ocr-overlay-opacity", opacitySlider.value / 100);
+  });
+
+  // Zoom só na foto (não na página toda, que já vem com pinça desabilitada) — a imagem cresce além
+  // do container, que rola nativamente (scroll do dedo) pra mirar num texto pequeno antes de
+  // selecionar. Como as caixas das palavras já são em %, elas acompanham o zoom automaticamente;
+  // só precisamos redesenhar o overlay pra recalcular o tamanho da fonte no novo tamanho exibido.
+  zoomSlider?.addEventListener("input", () => {
+    const inner = previewImg.closest(".foto-zoom-inner");
+    if (inner) inner.style.width = zoomSlider.value + "%";
+    if (ultimoOcr) renderOcrOverlay(overlay, ultimoOcr.linhas, ultimoOcr.imgWidth, ultimoOcr.imgHeight, previewImg);
   });
 
   // Fluxo rápido: seleciona um trecho do texto reconhecido (na foto ou no texto puro) e toca no
@@ -395,6 +421,7 @@ criarCapturaOcr({
   rawWrap: $("ocr-raw-wrap"),
   rawText: $("ocr-raw-text"),
   opacitySlider: $("ocr-opacity"),
+  zoomSlider: $("foto-zoom"),
   resolveField: (name) => $(name),
   autoFill: (fields) => {
     ultimaOrigemCadastro = "foto";
@@ -425,6 +452,7 @@ criarCapturaOcr({
   rawWrap: $("qp-ocr-raw-wrap"),
   rawText: $("qp-ocr-raw-text"),
   opacitySlider: $("qp-ocr-opacity"),
+  zoomSlider: $("qp-foto-zoom"),
   resolveField: (name) => $("form-parada-rapida").elements[name],
   autoFill: (fields) => autoFillParadaRapida($("form-parada-rapida"), fields),
 });
@@ -438,6 +466,7 @@ criarCapturaOcr({
   rawWrap: $("qpd-ocr-raw-wrap"),
   rawText: $("qpd-ocr-raw-text"),
   opacitySlider: $("qpd-ocr-opacity"),
+  zoomSlider: $("qpd-foto-zoom"),
   resolveField: (name) => $("form-parada-rapida-detalhe").elements[name],
   autoFill: (fields) => autoFillParadaRapida($("form-parada-rapida-detalhe"), fields),
 });

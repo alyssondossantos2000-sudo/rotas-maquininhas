@@ -1,24 +1,79 @@
-// Fotos tiradas direto da câmera do celular costumam vir enormes (3000-4000px, vários MB).
-// Processar isso cru no Tesseract.js pode estourar a memória do navegador no celular e derrubar
-// a aba (o app "reinicia" sozinho). Por isso sempre reduzimos a imagem antes de rodar o OCR.
-const MAX_DIM_OCR = 2000;
+// O usuário prefere usar a qualidade total da foto do celular (letra miúda de formulário real só
+// sai legível em resolução alta) e aceita que o OCR demore mais por causa disso — por isso o teto
+// aqui é bem alto, só como proteção contra um caso extremo (uma foto absurdamente grande vinda da
+// galeria, tipo um scan em altíssima resolução), não pra "comprimir" foto normal de câmera.
+const MAX_DIM_OCR = 4500;
 
-// Converte pra tons de cinza e "estica" o contraste — em vez de usar o pixel mais escuro/claro
-// bruto (um brilho de flash ou uma sombra num cantinho já estraga a conta inteira), corta os
-// 1% mais extremos de cada lado do histograma antes de esticar, pra ficar robusto a ruído de
-// câmera. Depois aplica uma nitidez leve (realça borda de letra pequena, que sai meio "borrada"
-// em foto tirada a pulso). Isso ajuda MUITO o Tesseract a ler foto de papel com sombra/pouca luz.
+// Papel amassado/dobrado (comum em formulário que já foi manuseado) tem sombra que varia de um
+// canto pro outro da própria folha — um canto pode estar bem mais escuro que o outro na MESMA
+// foto. Nesse caso um contraste global não resolve (ou clareia demais um lado, ou deixa o outro
+// escuro). Estimamos o "branco do papel" em cada região (o máximo local numa grade grosseira) e
+// dividimos a imagem por esse fundo — isso achata a variação de sombra/dobra mantendo o contraste
+// real da tinta. Técnica conhecida como correção de campo plano (flat-field correction).
+function corrigirSombraLocal(cinzas, w, h) {
+  const blocoTam = Math.max(16, Math.round(Math.min(w, h) / 24));
+  const gridW = Math.ceil(w / blocoTam);
+  const gridH = Math.ceil(h / blocoTam);
+  const fundoGrade = new Float32Array(gridW * gridH);
+
+  for (let gy = 0; gy < gridH; gy++) {
+    for (let gx = 0; gx < gridW; gx++) {
+      const x0 = gx * blocoTam, y0 = gy * blocoTam;
+      const x1 = Math.min(w, x0 + blocoTam), y1 = Math.min(h, y0 + blocoTam);
+      let max = 1;
+      for (let y = y0; y < y1; y++) {
+        const rowBase = y * w;
+        for (let x = x0; x < x1; x++) {
+          const v = cinzas[rowBase + x];
+          if (v > max) max = v;
+        }
+      }
+      fundoGrade[gy * gridW + gx] = max;
+    }
+  }
+
+  // Uint8ClampedArray (não Float32Array) por economia de memória — em resolução alta (foto em
+  // qualidade total) essa escolha sozinha corta ~75% da memória desse buffer, o que importa pra
+  // não estourar a memória do navegador no celular.
+  const corrigido = new Uint8ClampedArray(w * h);
+  for (let y = 0; y < h; y++) {
+    const gy = Math.min(gridH - 1, y / blocoTam);
+    const gy0 = Math.floor(gy), gy1 = Math.min(gridH - 1, gy0 + 1);
+    const fy = gy - gy0;
+    for (let x = 0; x < w; x++) {
+      const gx = Math.min(gridW - 1, x / blocoTam);
+      const gx0 = Math.floor(gx), gx1 = Math.min(gridW - 1, gx0 + 1);
+      const fx = gx - gx0;
+      const topo = fundoGrade[gy0 * gridW + gx0] * (1 - fx) + fundoGrade[gy0 * gridW + gx1] * fx;
+      const base = fundoGrade[gy1 * gridW + gx0] * (1 - fx) + fundoGrade[gy1 * gridW + gx1] * fx;
+      const fundo = Math.max(1, topo * (1 - fy) + base * fy);
+      corrigido[y * w + x] = (cinzas[y * w + x] / fundo) * 235;
+    }
+  }
+  return corrigido;
+}
+
+// Converte pra tons de cinza, achata sombra/dobra desigual (corrigirSombraLocal) e depois "estica"
+// o contraste — em vez de usar o pixel mais escuro/claro bruto (um brilho de flash ou uma sombra
+// num cantinho já estraga a conta), corta 1% mais extremo de cada lado do histograma antes de
+// esticar, pra ficar robusto a ruído de câmera. Por fim aplica nitidez leve (realça borda de letra
+// pequena, que sai meio "borrada" em foto tirada a pulso). Isso ajuda MUITO o Tesseract a ler foto
+// de papel de formulário real (dobrado, com sombra desigual, pouca luz).
 function aplicarCinzaEContraste(ctx, w, h) {
   const imgData = ctx.getImageData(0, 0, w, h);
   const px = imgData.data;
   const n = w * h;
   const cinzas = new Uint8ClampedArray(n);
-  const histograma = new Uint32Array(256);
 
   for (let i = 0, j = 0; i < px.length; i += 4, j++) {
-    const cinza = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
-    cinzas[j] = cinza;
-    histograma[cinzas[j]]++;
+    cinzas[j] = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+  }
+
+  const semSombra = corrigirSombraLocal(cinzas, w, h);
+
+  const histograma = new Uint32Array(256);
+  for (let j = 0; j < n; j++) {
+    histograma[semSombra[j]]++;
   }
 
   const corte = Math.floor(n * 0.01);
@@ -36,7 +91,7 @@ function aplicarCinzaEContraste(ctx, w, h) {
   const range = Math.max(1, max - min);
   const contraste = new Uint8ClampedArray(n);
   for (let j = 0; j < n; j++) {
-    contraste[j] = ((cinzas[j] - min) / range) * 255;
+    contraste[j] = ((semSombra[j] - min) / range) * 255;
   }
 
   for (let y = 0; y < h; y++) {
@@ -222,6 +277,24 @@ function firstMatch(text, patterns) {
   return "";
 }
 
+// Igual a firstMatch, mas pula capturas "vazias de conteúdo" (só pontuação/ruído do OCR, tipo um
+// "=" ou ":" solto) e continua procurando a próxima ocorrência do mesmo rótulo no texto. Formulário
+// com um cabeçalho de seção repetindo o nome do campo (ex: "DADOS DO CLIENTE:" antes do "Cliente:"
+// de verdade) faz a busca simples parar cedo demais na ocorrência errada.
+function firstMatchComConteudo(text, patterns) {
+  for (const re of patterns) {
+    const flags = re.flags.includes("g") ? re.flags : re.flags + "g";
+    const global = new RegExp(re.source, flags);
+    let m;
+    while ((m = global.exec(text))) {
+      const valor = (m[1] || "").trim();
+      if (/[a-zà-ÿ]{2,}/i.test(valor)) return valor;
+      if (m.index === global.lastIndex) global.lastIndex++; // evita loop infinito em match vazio
+    }
+  }
+  return "";
+}
+
 function onlyDigits(s) { return (s || "").replace(/\D/g, ""); }
 
 // Tenta extrair campos de OS a partir do texto reconhecido, cobrindo os padrões mais comuns
@@ -242,8 +315,10 @@ export function parseOsFields(rawText) {
     if (m) result.numero_os = m[0];
   }
 
-  result.nome_cliente = firstMatch(text, [
-    /^\s*cliente\s*[:\-]\s*(.+)$/im,
+  // Sem ^ ancorando início de linha: às vezes o OCR pega um resíduo de ruído antes do rótulo
+  // ("ao Cliente: ...") e isso fazia a extração falhar por completo mesmo com o rótulo certinho.
+  result.nome_cliente = firstMatchComConteudo(text, [
+    /\bcliente\s*[:\-]\s*(.+)$/im,
     /nome\s*fantasia\s*[:\-]\s*(.+)/i,
     /raz[aã]o\s*social\s*[:\-]\s*(.+)/i,
   ]);
