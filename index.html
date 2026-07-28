@@ -112,15 +112,15 @@
     </label>
 
     <h3>Adicionar parada rápida</h3>
-    <form id="form-parada-rapida">
-      <label>Nome do cliente *<input type="text" id="qp-cliente" required></label>
-      <label>Endereço completo *<textarea id="qp-endereco" rows="2" required placeholder="Rua, número, bairro"></textarea></label>
-      <label>Tipo de serviço<input type="text" id="qp-servico" placeholder="Instalação, troca, manutenção..."></label>
-      <label>Máquina<input type="text" id="qp-maquina" placeholder="Cielo, Stone, Sicredi..."></label>
-      <label>Contato (opcional)<input type="tel" id="qp-contato" placeholder="(67) 91234-5678"></label>
-      <label>Observações (opcional)<textarea id="qp-obs" rows="2"></textarea></label>
+    <form id="form-parada-rapida" class="form-parada-rapida">
+      <label>Nome do cliente *<input type="text" name="cliente" required></label>
+      <label>Endereço completo *<textarea name="endereco" rows="2" required placeholder="Rua, número, bairro"></textarea></label>
+      <label>Tipo de serviço<input type="text" name="servico" placeholder="Instalação, troca, manutenção..."></label>
+      <label>Máquina<input type="text" name="maquina" placeholder="Cielo, Stone, Sicredi..."></label>
+      <label>Contato (opcional)<input type="tel" name="contato" placeholder="(67) 91234-5678"></label>
+      <label>Observações (opcional)<textarea name="obs" rows="2"></textarea></label>
       <button type="submit" class="btn btn-secondary btn-block">+ Adicionar parada</button>
-      <p id="qp-status" class="muted"></p>
+      <p class="qp-status muted"></p>
     </form>
 
     <h3>Selecione as OS pendentes</h3>
@@ -133,6 +133,21 @@
   <!-- ROTA DETAIL (dia a dia) -->
   <section id="view-rota-detail" class="view hidden">
     <div id="rota-detail-header"></div>
+
+    <button type="button" id="btn-toggle-parada-rapida" class="btn btn-secondary btn-block">+ Adicionar parada nesta rota</button>
+    <div id="parada-rapida-detalhe-wrap" class="hidden">
+      <form id="form-parada-rapida-detalhe" class="form-parada-rapida">
+        <label>Nome do cliente *<input type="text" name="cliente" required></label>
+        <label>Endereço completo *<textarea name="endereco" rows="2" required placeholder="Rua, número, bairro"></textarea></label>
+        <label>Tipo de serviço<input type="text" name="servico" placeholder="Instalação, troca, manutenção..."></label>
+        <label>Máquina<input type="text" name="maquina" placeholder="Cielo, Stone, Sicredi..."></label>
+        <label>Contato (opcional)<input type="tel" name="contato" placeholder="(67) 91234-5678"></label>
+        <label>Observações (opcional)<textarea name="obs" rows="2"></textarea></label>
+        <button type="submit" class="btn btn-primary btn-block">+ Adicionar à rota</button>
+        <p class="qp-status muted"></p>
+      </form>
+    </div>
+
     <div id="rota-detail-map"></div>
     <ol id="rota-detail-stops" class="stop-list"></ol>
     <button id="btn-rota-voltar" class="btn btn-ghost btn-block">Voltar para rotas</button>

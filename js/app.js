@@ -438,7 +438,7 @@ async function openRotaBuild() {
   $("rota-origem").value = "";
   $("rota-build-status").textContent = "";
   $("form-parada-rapida").reset();
-  $("qp-status").textContent = "";
+  $("form-parada-rapida").querySelector(".qp-status").textContent = "";
 
   const { data, error } = await supabase.from("ordens_servico").select("*").eq("status", "pendente").order("created_at", { ascending: false });
   if (error) { toast("Erro ao carregar OS pendentes: " + error.message); return; }
@@ -450,43 +450,66 @@ async function openRotaBuild() {
   showView("rota-build");
 }
 
-$("form-parada-rapida").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const statusEl = $("qp-status");
-  const nome_cliente = $("qp-cliente").value.trim();
-  const endereco = $("qp-endereco").value.trim();
-  if (!nome_cliente || !endereco) {
-    statusEl.textContent = "Preencha cliente e endereço.";
-    return;
-  }
+// Formulário de "parada rápida": cria uma OS com só cliente + endereço obrigatórios (o resto é
+// opcional), usado tanto ao montar uma rota nova quanto para acrescentar parada numa rota já
+// salva. `onAdded(osInserida)` decide o que fazer com a parada criada em cada tela.
+function wireQuickAddForm(form, onAdded) {
+  const statusEl = form.querySelector(".qp-status");
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const nome_cliente = form.elements.cliente.value.trim();
+    const endereco = form.elements.endereco.value.trim();
+    if (!nome_cliente || !endereco) {
+      statusEl.textContent = "Preencha cliente e endereço.";
+      return;
+    }
 
-  const btn = e.target.querySelector('button[type="submit"]');
-  btn.disabled = true;
-  statusEl.textContent = "Localizando endereço...";
+    const btn = form.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    statusEl.textContent = "Localizando endereço...";
 
-  const geo = await geocodeAddress(endereco);
-  const payload = {
-    nome_cliente,
-    endereco,
-    servico: $("qp-servico").value.trim(),
-    banco: $("qp-maquina").value.trim(),
-    contato: $("qp-contato").value.trim(),
-    observacoes: $("qp-obs").value.trim(),
-    status: "pendente",
-    origem_cadastro: "manual",
-    lat: geo ? geo.lat : null,
-    lng: geo ? geo.lng : null,
-    geocode_status: geo ? "ok" : "falhou",
-  };
+    const geo = await geocodeAddress(endereco);
+    const payload = {
+      nome_cliente,
+      endereco,
+      servico: form.elements.servico.value.trim(),
+      banco: form.elements.maquina.value.trim(),
+      contato: form.elements.contato.value.trim(),
+      observacoes: form.elements.obs.value.trim(),
+      status: "pendente",
+      origem_cadastro: "manual",
+      lat: geo ? geo.lat : null,
+      lng: geo ? geo.lng : null,
+      geocode_status: geo ? "ok" : "falhou",
+    };
 
-  const { data: inserted, error } = await supabase.from("ordens_servico").insert(payload).select().single();
-  btn.disabled = false;
+    const { data: inserted, error } = await supabase.from("ordens_servico").insert(payload).select().single();
+    btn.disabled = false;
+    if (error) { statusEl.textContent = "Erro ao adicionar: " + error.message; return; }
 
-  if (error) { statusEl.textContent = "Erro ao adicionar: " + error.message; return; }
+    form.reset();
+    statusEl.textContent = geo ? "Parada adicionada!" : "Parada adicionada, mas não localizei o endereço — ajuste depois em \"OS\" > Editar.";
+    await onAdded(inserted);
+  });
+}
 
+wireQuickAddForm($("form-parada-rapida"), async (inserted) => {
   addOsSelectRow(inserted, { checked: true });
-  e.target.reset();
-  statusEl.textContent = geo ? "Parada adicionada e já marcada na lista abaixo!" : "Parada adicionada, mas não localizei o endereço — ajuste depois em \"OS\" > Editar.";
+});
+
+$("btn-toggle-parada-rapida").addEventListener("click", () => {
+  $("parada-rapida-detalhe-wrap").classList.toggle("hidden");
+});
+
+wireQuickAddForm($("form-parada-rapida-detalhe"), async (inserted) => {
+  const ordem = detailStops.length + 1;
+  await supabase.from("ordens_servico").update({ rota_id: detailRota.id, ordem_na_rota: ordem, status: "roteirizada" }).eq("id", inserted.id);
+  inserted.rota_id = detailRota.id;
+  inserted.ordem_na_rota = ordem;
+  inserted.status = "roteirizada";
+  detailStops.push(inserted);
+  renderRotaDetail();
+  toast("Parada adicionada à rota!");
 });
 
 $("rota-origem").addEventListener("input", () => { buildOrigin = null; });
@@ -671,6 +694,8 @@ async function openRotaDetail(id) {
 
   detailRota = rota;
   detailStops = stops || [];
+  $("parada-rapida-detalhe-wrap").classList.add("hidden");
+  $("form-parada-rapida-detalhe").reset();
   renderRotaDetail();
   showView("rota-detail");
 }
