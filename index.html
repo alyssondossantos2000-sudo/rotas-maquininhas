@@ -63,12 +63,22 @@
     <div id="tab-foto" class="tab-panel hidden">
       <label class="btn btn-secondary btn-block" for="foto-input">📷 Tirar foto / escolher imagem</label>
       <input type="file" id="foto-input" accept="image/*" class="hidden">
-      <div id="ocr-status" class="muted hidden"></div>
-      <img id="foto-preview" class="foto-preview hidden">
-      <details id="ocr-raw-wrap" class="hidden">
-        <summary>Texto reconhecido (conferir)</summary>
-        <pre id="ocr-raw-text"></pre>
-      </details>
+    </div>
+
+    <div id="ocr-status" class="muted hidden"></div>
+    <img id="foto-preview" class="foto-preview hidden">
+    <div id="ocr-raw-wrap" class="hidden">
+      <p class="muted">Texto reconhecido — selecione um trecho abaixo e toque no campo pra jogar ele lá:</p>
+      <pre id="ocr-raw-text"></pre>
+      <div class="ocr-assign-row">
+        <button type="button" class="btn btn-secondary ocr-assign-btn" data-field="os-numero">→ Nº OS</button>
+        <button type="button" class="btn btn-secondary ocr-assign-btn" data-field="os-cliente">→ Cliente</button>
+        <button type="button" class="btn btn-secondary ocr-assign-btn" data-field="os-endereco">→ Endereço</button>
+        <button type="button" class="btn btn-secondary ocr-assign-btn" data-field="os-contato">→ Contato</button>
+        <button type="button" class="btn btn-secondary ocr-assign-btn" data-field="os-banco">→ Máquina</button>
+        <button type="button" class="btn btn-secondary ocr-assign-btn" data-field="os-servico">→ Serviço</button>
+        <button type="button" class="btn btn-secondary ocr-assign-btn" data-field="os-obs">→ Obs.</button>
+      </div>
     </div>
 
     <form id="form-os">

@@ -143,8 +143,14 @@ form{display:flex; flex-direction:column}
 .tab-panel{margin-bottom:16px}
 
 .foto-preview{width:100%; border-radius:var(--radius); margin-top:12px}
-#ocr-raw-wrap{margin-top:10px; background:var(--card); border-radius:10px; padding:10px; font-size:12px}
-#ocr-raw-wrap pre{white-space:pre-wrap; color:var(--muted); margin:8px 0 0}
+#ocr-raw-wrap{margin:10px 0; background:var(--card); border-radius:10px; padding:10px; font-size:12px}
+#ocr-raw-wrap pre{
+  white-space:pre-wrap; color:var(--text); margin:8px 0 0; max-height:220px; overflow-y:auto;
+  -webkit-user-select:text; user-select:text; padding:8px; background:var(--card-2); border-radius:8px;
+}
+.ocr-assign-row{display:flex; flex-wrap:wrap; gap:6px; margin-top:10px}
+.ocr-assign-btn{padding:8px 10px; font-size:12px; flex:none}
+.ocr-assigned-flash{outline:2px solid var(--ok); outline-offset:1px; transition:outline-color .5s}
 
 /* ---- select list for building routes ---- */
 .os-select-row{

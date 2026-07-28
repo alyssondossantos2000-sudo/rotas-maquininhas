@@ -316,11 +316,23 @@ $("foto-input").addEventListener("change", async (e) => {
 
     $("ocr-raw-text").textContent = text.trim() || "(nada reconhecido)";
     $("ocr-raw-wrap").classList.remove("hidden");
-    switchTab("manual");
   } catch (err) {
     statusEl.textContent = "Não consegui ler a foto. Preencha manualmente.";
     console.error(err);
   }
+});
+
+// Fluxo rápido: seleciona um trecho do texto reconhecido e toca no campo — sem trocar de tela,
+// sem recarregar nada. Repete pra cada campo até preencher tudo.
+document.querySelectorAll(".ocr-assign-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const selecionado = window.getSelection().toString().trim();
+    if (!selecionado) { toast("Selecione um trecho do texto reconhecido primeiro."); return; }
+    const campo = $(btn.dataset.field);
+    campo.value = selecionado;
+    campo.classList.add("ocr-assigned-flash");
+    setTimeout(() => campo.classList.remove("ocr-assigned-flash"), 500);
+  });
 });
 
 $("form-os").addEventListener("submit", async (e) => {
