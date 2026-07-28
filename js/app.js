@@ -1,7 +1,7 @@
-import { supabase } from "./supabaseClient.js?v=15";
-import { geocodeAddress } from "./geocode.js?v=15";
-import { optimizeTrip } from "./osrm.js?v=15";
-import { criarCapturaDocumento, prepararPipeline } from "./ui/capture.js?v=15";
+import { supabase } from "./supabaseClient.js?v=16";
+import { geocodeAddress } from "./geocode.js?v=16";
+import { optimizeTrip } from "./osrm.js?v=16";
+import { criarCapturaDocumento, prepararPipeline } from "./ui/capture.js?v=16";
 
 // ---------------------------------------------------------------- state
 let currentUser = null;

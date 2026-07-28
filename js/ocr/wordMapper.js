@@ -4,9 +4,17 @@
 // tabela, seleção por bloco, etc depois). Cada provider tem um formato bruto diferente (Tesseract:
 // `lines[].words[]`; ML Kit: `blocks[].lines[].elements[]`) — detecta qual veio pela forma do
 // objeto, sem o resto do pipeline precisar saber a diferença.
+//
+// BUG REAL já encontrado aqui: o Tesseract TAMBÉM devolve uma propriedade `blocks` (hierarquia
+// própria dele: blocks→paragraphs→lines→words, formato bem diferente do ML Kit) — checar só "tem
+// `blocks`?" reconhecia o resultado do Tesseract como se fosse do ML Kit por engano, e a
+// normalização errada zerava TODAS as palavras (sem lançar erro nenhum — o pipeline seguia "com
+// sucesso" e resultado vazio). Por isso o teste de Tesseract (via `lines[].words`) vem primeiro e
+// é o mais específico dos dois.
 export function normalizarResultado(dadosBrutos) {
+  if (Array.isArray(dadosBrutos.lines) && dadosBrutos.lines[0]?.words) return normalizarTesseract(dadosBrutos);
   if (Array.isArray(dadosBrutos.blocks)) return normalizarMlKit(dadosBrutos);
-  return normalizarTesseract(dadosBrutos);
+  return { palavras: [], textoBruto: dadosBrutos.text || "" };
 }
 
 function normalizarTesseract(dadosBrutos) {

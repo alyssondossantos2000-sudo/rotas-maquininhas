@@ -2,7 +2,7 @@
 // As duas bibliotecas rodam 100% no navegador via WASM — sem servidor, sem custo, mesmo princípio
 // do Tesseract.js já usado no resto do app. Carregadas SOB DEMANDA (só quando a aba "Por foto"
 // abre ou uma foto é processada), pra não pesar o carregamento inicial do app com ~8MB de WASM.
-import { comLog } from "../core/logger.js?v=15";
+import { comLog } from "../core/logger.js?v=16";
 
 const OPENCV_URL = "https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.10.0-release.1/dist/opencv.js";
 const JSCANIFY_URL = "https://cdn.jsdelivr.net/npm/jscanify@1.4.3/src/jscanify.min.js";
