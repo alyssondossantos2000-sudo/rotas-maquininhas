@@ -3,27 +3,56 @@
 // a aba (o app "reinicia" sozinho). Por isso sempre reduzimos a imagem antes de rodar o OCR.
 const MAX_DIM_OCR = 2000;
 
-// Converte pra tons de cinza e "estica" o contraste (o pixel mais escuro vira preto, o mais claro
-// vira branco) — isso ajuda MUITO o Tesseract a ler foto de papel com sombra/pouca luz, sem o
-// risco de um threshold fixo (preto/branco bruto) que pode arruinar partes com iluminação desigual.
+// Converte pra tons de cinza e "estica" o contraste — em vez de usar o pixel mais escuro/claro
+// bruto (um brilho de flash ou uma sombra num cantinho já estraga a conta inteira), corta os
+// 1% mais extremos de cada lado do histograma antes de esticar, pra ficar robusto a ruído de
+// câmera. Depois aplica uma nitidez leve (realça borda de letra pequena, que sai meio "borrada"
+// em foto tirada a pulso). Isso ajuda MUITO o Tesseract a ler foto de papel com sombra/pouca luz.
 function aplicarCinzaEContraste(ctx, w, h) {
   const imgData = ctx.getImageData(0, 0, w, h);
   const px = imgData.data;
-  const cinzas = new Uint8ClampedArray(w * h);
+  const n = w * h;
+  const cinzas = new Uint8ClampedArray(n);
+  const histograma = new Uint32Array(256);
 
-  let min = 255, max = 0;
   for (let i = 0, j = 0; i < px.length; i += 4, j++) {
     const cinza = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
     cinzas[j] = cinza;
-    if (cinza < min) min = cinza;
-    if (cinza > max) max = cinza;
+    histograma[cinzas[j]]++;
+  }
+
+  const corte = Math.floor(n * 0.01);
+  let min = 0, max = 255, acumulado = 0;
+  for (let v = 0; v < 256; v++) {
+    acumulado += histograma[v];
+    if (acumulado > corte) { min = v; break; }
+  }
+  acumulado = 0;
+  for (let v = 255; v >= 0; v--) {
+    acumulado += histograma[v];
+    if (acumulado > corte) { max = v; break; }
   }
 
   const range = Math.max(1, max - min);
-  for (let i = 0, j = 0; i < px.length; i += 4, j++) {
-    const v = ((cinzas[j] - min) / range) * 255;
-    px[i] = px[i + 1] = px[i + 2] = v;
+  const contraste = new Uint8ClampedArray(n);
+  for (let j = 0; j < n; j++) {
+    contraste[j] = ((cinzas[j] - min) / range) * 255;
   }
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const idx = y * w + x;
+      let valor = contraste[idx];
+      if (x > 0 && x < w - 1 && y > 0 && y < h - 1) {
+        const vizinhos = contraste[idx - w] + contraste[idx + w] + contraste[idx - 1] + contraste[idx + 1];
+        valor = contraste[idx] * 3 - vizinhos / 2;
+      }
+      const v = Math.max(0, Math.min(255, valor));
+      const p = idx * 4;
+      px[p] = px[p + 1] = px[p + 2] = v;
+    }
+  }
+
   ctx.putImageData(imgData, 0, 0);
 }
 
@@ -77,30 +106,6 @@ async function detectarAngulo(bitmap) {
     console.error("Não foi possível detectar a rotação da foto:", err);
   }
   return 0;
-}
-
-// Converte pra tons de cinza e "estica" o contraste (o pixel mais escuro vira preto, o mais claro
-// vira branco) — isso ajuda MUITO o Tesseract a ler foto de papel com sombra/pouca luz, sem o
-// risco de um threshold fixo (preto/branco bruto) que pode arruinar partes com iluminação desigual.
-function aplicarCinzaEContraste(ctx, w, h) {
-  const imgData = ctx.getImageData(0, 0, w, h);
-  const px = imgData.data;
-  const cinzas = new Uint8ClampedArray(w * h);
-
-  let min = 255, max = 0;
-  for (let i = 0, j = 0; i < px.length; i += 4, j++) {
-    const cinza = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
-    cinzas[j] = cinza;
-    if (cinza < min) min = cinza;
-    if (cinza > max) max = cinza;
-  }
-
-  const range = Math.max(1, max - min);
-  for (let i = 0, j = 0; i < px.length; i += 4, j++) {
-    const v = ((cinzas[j] - min) / range) * 255;
-    px[i] = px[i + 1] = px[i + 2] = v;
-  }
-  ctx.putImageData(imgData, 0, 0);
 }
 
 async function processarImagem(file, maxDim = MAX_DIM_OCR, onProgress) {
