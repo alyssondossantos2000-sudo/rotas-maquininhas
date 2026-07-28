@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Teste do pipeline de leitura de documento</title>
+<script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
+<style>
+  body{font-family:system-ui,sans-serif; background:#0f172a; color:#eaf1ff; padding:20px}
+  button{padding:10px 16px; font-size:14px; cursor:pointer}
+  table{border-collapse:collapse; width:100%; margin-top:16px; font-size:13px}
+  td,th{border:1px solid #334155; padding:6px 8px; text-align:left}
+  th{background:#1e293b}
+  .ok{color:#4ade80} .fail{color:#f87171}
+  #resumo{margin-top:12px; font-weight:bold}
+</style>
+</head>
+<body>
+  <h1>Teste do pipeline de leitura de documento</h1>
+  <p>Roda o pipeline completo (documentDetector → perspectiveCorrection → autoRotate → OCR → layout → interpret) contra as fotos reais em <code>fotos-teste/</code>.</p>
+  <button id="rodar">Rodar testes</button>
+  <div id="resumo"></div>
+  <table id="tabela"><thead><tr>
+    <th>Foto</th><th>OK?</th><th>Tempo (s)</th><th>Palavras</th><th>% com conteúdo</th>
+    <th>Perspectiva?</th><th>Nº OS</th><th>Cliente</th><th>Banco</th><th>Contato</th>
+  </tr></thead><tbody></tbody></table>
+  <script type="module" src="./pipeline.js"></script>
+</body>
+</html>

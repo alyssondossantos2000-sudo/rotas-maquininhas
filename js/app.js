@@ -1,7 +1,7 @@
-import { supabase } from "./supabaseClient.js?v=10";
-import { geocodeAddress } from "./geocode.js?v=10";
-import { optimizeTrip } from "./osrm.js?v=10";
-import { runOcr, parseOsFields, warmupOcr } from "./ocr.js?v=10";
+import { supabase } from "./supabaseClient.js?v=13";
+import { geocodeAddress } from "./geocode.js?v=13";
+import { optimizeTrip } from "./osrm.js?v=13";
+import { criarCapturaDocumento, prepararPipeline } from "./ui/capture.js?v=13";
 
 // ---------------------------------------------------------------- state
 let currentUser = null;
@@ -285,158 +285,15 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
 function switchTab(tab) {
   document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   $("tab-foto").classList.toggle("hidden", tab !== "foto");
-  // Começa a preparar o leitor de texto assim que a aba "Por foto" abre, antes da foto ser
-  // tirada — assim o tempo de download/inicialização fica escondido enquanto o usuário fotografa.
-  if (tab === "foto") warmupOcr();
+  // Começa a preparar o pipeline de leitura (OCR + detecção de documento) assim que a aba "Por
+  // foto" abre, antes da foto ser tirada — assim o tempo de download/inicialização fica escondido
+  // enquanto o usuário fotografa.
+  if (tab === "foto") prepararPipeline();
 }
 
 let ultimaOrigemCadastro = "manual";
 
-// Desenha o texto reconhecido em cima da própria foto (estilo Google Lens), já corrigida de
-// rotação: cada palavra vira uma "etiqueta" visível posicionada exatamente onde ela aparece na
-// imagem, selecionável com o dedo. O tamanho da letra é ÚNICO pra foto inteira (não varia por
-// palavra) — usar a altura da caixa que o Tesseract detectou pra cada palavra parecia mais
-// "preciso", mas numa foto ruim/torta o Tesseract às vezes detecta uma caixa errada (bem alta ou
-// bem baixa), e a fonte proporcional a isso saía gigante cobrindo outro texto, ou minúscula demais
-// pra ler. Um tamanho fixo e legível em toda a foto evita esse problema de vez.
-function renderOcrOverlay(overlay, linhas, imgWidth, imgHeight, previewImgEl) {
-  overlay.innerHTML = "";
-  const dispH = previewImgEl.clientHeight || imgHeight;
-  const fontSize = Math.max(11, dispH * 0.018);
-
-  linhas.forEach((linha) => {
-    linha.palavras.forEach((palavra) => {
-      const { x0, y0, x1, y1 } = palavra.bbox;
-      const span = document.createElement("span");
-      span.className = "ocr-word";
-      span.textContent = palavra.text;
-      span.style.left = (x0 / imgWidth) * 100 + "%";
-      span.style.top = (y0 / imgHeight) * 100 + "%";
-      // Largura NÃO é travada no bbox do Tesseract: a fonte que a gente desenha quase sempre é
-      // mais larga que a caixinha detectada (que é apertada no glifo original), e com
-      // overflow:hidden isso CORTAVA o final de palavras compridas ("QUERUBIM" virava "QUERU").
-      // Melhor deixar a caixa crescer pro tamanho do texto do que esconder texto reconhecido.
-      span.style.minWidth = ((x1 - x0) / imgWidth) * 100 + "%";
-      span.style.fontSize = fontSize + "px";
-      overlay.appendChild(span);
-      overlay.appendChild(document.createTextNode(" "));
-    });
-    overlay.appendChild(document.createTextNode("\n"));
-  });
-}
-
-// Monta um "capturador de foto com OCR" completo (botão de foto, prévia + sobreposição estilo
-// Lens, controle de opacidade, botões de atribuir texto pra campo) reutilizado em 3 lugares:
-// cadastro completo de OS e nas duas telas de "parada rápida". `resolveField` decide onde cada
-// botão de atribuir manda o texto, e `autoFill` decide o que fazer com os campos reconhecidos
-// automaticamente — cada tela resolve isso à sua própria maneira (IDs fixos vs. campos de form).
-function criarCapturaOcr({ fileInputs, previewWrap, previewImg, overlay, statusEl, rawWrap, rawText, opacitySlider, zoomSlider, girarBtn, tipoSelect, resolveField, autoFill }) {
-  let ultimoOcr = null; // {linhas, imgWidth, imgHeight} — guardado pra poder redesenhar o overlay quando o zoom muda
-  let arquivoAtual = null; // guardado pra dar pra "Girar" reprocessar sem pedir a foto de novo
-  let rotacaoManual = 0;
-
-  const resetZoom = () => {
-    if (!zoomSlider) return;
-    zoomSlider.value = 100;
-    const inner = previewImg.closest(".foto-zoom-inner");
-    if (inner) inner.style.width = "100%";
-  };
-
-  // Compartilhado entre "escolher foto" e "girar" (que reprocessa o mesmo arquivo com uma
-  // rotação manual a mais) — o detector automático de orientação (OSD do Tesseract) às vezes erra
-  // em foto com fundo bagunçado ou pouco contraste, e não tem como saber isso sem o usuário olhar.
-  const processarArquivo = async (file) => {
-    previewWrap.classList.remove("hidden");
-    overlay.innerHTML = "";
-    statusEl.classList.remove("hidden");
-    statusEl.textContent = "Preparando...";
-    ultimoOcr = null;
-
-    try {
-      const { text, linhas, imgWidth, imgHeight, imagemCorrigidaBlob } = await runOcr(file, (msg) => { statusEl.textContent = msg; }, rotacaoManual);
-
-      previewImg.src = URL.createObjectURL(imagemCorrigidaBlob || file);
-      await new Promise((resolve) => { previewImg.onload = resolve; previewImg.onerror = resolve; });
-
-      statusEl.textContent = "Leitura concluída — selecione o texto na foto ou confira os campos.";
-      autoFill(parseOsFields(text, tipoSelect?.value));
-
-      rawWrap.classList.remove("hidden");
-      if (linhas && linhas.length && imgWidth && imgHeight) {
-        ultimoOcr = { linhas, imgWidth, imgHeight };
-        renderOcrOverlay(overlay, linhas, imgWidth, imgHeight, previewImg);
-        overlay.style.setProperty("--ocr-overlay-opacity", (opacitySlider?.value ?? 85) / 100);
-        rawText.classList.add("hidden");
-      } else {
-        // Sem posição das palavras (ex: imagem não pôde ser processada) — mostra o texto puro como reserva.
-        rawText.textContent = text.trim() || "(nada reconhecido)";
-        rawText.classList.remove("hidden");
-      }
-    } catch (err) {
-      statusEl.textContent = "Não consegui ler a foto. Preencha manualmente.";
-      console.error(err);
-    }
-  };
-
-  const onFileChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    arquivoAtual = file;
-    rotacaoManual = 0;
-    resetZoom();
-    processarArquivo(file);
-  };
-  // Câmera e galeria são dois <input type=file> separados (um com capture="environment", outro
-  // sem) — depender de um único input pra oferecer as duas opções não é confiável em todo
-  // Android (às vezes só abre a galeria direto, sem opção de câmera).
-  fileInputs.forEach((input) => input.addEventListener("change", onFileChange));
-
-  // Gira 90° por clique e reprocessa a MESMA foto (recalcula posição de cada palavra do zero —
-  // não dá pra só girar a exibição, porque as caixas do overlay são amarradas ao enquadramento
-  // já corrigido que o Tesseract leu).
-  girarBtn?.addEventListener("click", () => {
-    if (!arquivoAtual) return;
-    rotacaoManual = (rotacaoManual + 90) % 360;
-    resetZoom();
-    processarArquivo(arquivoAtual);
-  });
-
-  opacitySlider?.addEventListener("input", () => {
-    overlay.style.setProperty("--ocr-overlay-opacity", opacitySlider.value / 100);
-  });
-
-  // Zoom só na foto (não na página toda, que já vem com pinça desabilitada) — a imagem cresce além
-  // do container, que rola nativamente (scroll do dedo) pra mirar num texto pequeno antes de
-  // selecionar. Como as caixas das palavras já são em %, elas acompanham o zoom automaticamente;
-  // só precisamos redesenhar o overlay pra recalcular o tamanho da fonte no novo tamanho exibido.
-  zoomSlider?.addEventListener("input", () => {
-    const inner = previewImg.closest(".foto-zoom-inner");
-    if (inner) inner.style.width = zoomSlider.value + "%";
-    if (ultimoOcr) renderOcrOverlay(overlay, ultimoOcr.linhas, ultimoOcr.imgWidth, ultimoOcr.imgHeight, previewImg);
-  });
-
-  // Fluxo rápido: seleciona um trecho do texto reconhecido (na foto ou no texto puro) e toca no
-  // campo — sem trocar de tela, sem recarregar nada. No celular, tocar num botão pode fazer o
-  // navegador limpar a seleção de texto antes do clique "oficial" disparar — por isso capturamos
-  // o texto já no toque inicial (pointerdown), com preventDefault pra não perder a seleção.
-  rawWrap.querySelectorAll(".ocr-assign-btn").forEach((btn) => {
-    let textoCapturado = "";
-    btn.addEventListener("pointerdown", (e) => {
-      e.preventDefault();
-      textoCapturado = window.getSelection().toString().trim();
-    });
-    btn.addEventListener("click", () => {
-      if (!textoCapturado) { toast("Selecione um trecho do texto reconhecido primeiro."); return; }
-      const campo = resolveField(btn.dataset.field);
-      if (!campo) return;
-      campo.value = textoCapturado;
-      campo.classList.add("ocr-assigned-flash");
-      setTimeout(() => campo.classList.remove("ocr-assigned-flash"), 500);
-    });
-  });
-}
-
-criarCapturaOcr({
+criarCapturaDocumento({
   fileInputs: [$("foto-input-camera"), $("foto-input-galeria")],
   previewWrap: $("foto-preview-wrap"),
   previewImg: $("foto-preview"),
@@ -449,6 +306,7 @@ criarCapturaOcr({
   girarBtn: $("foto-girar"),
   tipoSelect: $("foto-tipo"),
   resolveField: (name) => $(name),
+  avisar: toast,
   autoFill: (fields) => {
     ultimaOrigemCadastro = "foto";
     if (fields.numero_os) $("os-numero").value = fields.numero_os;
@@ -469,7 +327,7 @@ function autoFillParadaRapida(form, fields) {
   if (fields.servico) form.elements.servico.value = fields.servico;
 }
 
-criarCapturaOcr({
+criarCapturaDocumento({
   fileInputs: [$("qp-foto-input-camera"), $("qp-foto-input-galeria")],
   previewWrap: $("qp-foto-preview-wrap"),
   previewImg: $("qp-foto-preview"),
@@ -482,10 +340,11 @@ criarCapturaOcr({
   girarBtn: $("qp-foto-girar"),
   tipoSelect: $("qp-foto-tipo"),
   resolveField: (name) => $("form-parada-rapida").elements[name],
+  avisar: toast,
   autoFill: (fields) => autoFillParadaRapida($("form-parada-rapida"), fields),
 });
 
-criarCapturaOcr({
+criarCapturaDocumento({
   fileInputs: [$("qpd-foto-input-camera"), $("qpd-foto-input-galeria")],
   previewWrap: $("qpd-foto-preview-wrap"),
   previewImg: $("qpd-foto-preview"),
@@ -498,6 +357,7 @@ criarCapturaOcr({
   girarBtn: $("qpd-foto-girar"),
   tipoSelect: $("qpd-foto-tipo"),
   resolveField: (name) => $("form-parada-rapida-detalhe").elements[name],
+  avisar: toast,
   autoFill: (fields) => autoFillParadaRapida($("form-parada-rapida-detalhe"), fields),
 });
 
@@ -687,12 +547,12 @@ wireQuickAddForm($("form-parada-rapida"), async (inserted) => {
 
 $("btn-toggle-parada-rapida-build").addEventListener("click", () => {
   $("parada-rapida-build-wrap").classList.toggle("hidden");
-  warmupOcr();
+  prepararPipeline();
 });
 
 $("btn-toggle-parada-rapida").addEventListener("click", () => {
   $("parada-rapida-detalhe-wrap").classList.toggle("hidden");
-  warmupOcr();
+  prepararPipeline();
 });
 
 wireQuickAddForm($("form-parada-rapida-detalhe"), async (inserted) => {

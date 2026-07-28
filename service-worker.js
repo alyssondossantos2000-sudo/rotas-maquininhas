@@ -1,4 +1,4 @@
-const CACHE = "rotas-maquininhas-v2";
+const CACHE = "rotas-maquininhas-v3";
 const ASSETS = [
   "./",
   "./index.html",
@@ -8,7 +8,21 @@ const ASSETS = [
   "./js/supabaseClient.js",
   "./js/geocode.js",
   "./js/osrm.js",
-  "./js/ocr.js",
+  "./js/core/logger.js",
+  "./js/image/documentDetector.js",
+  "./js/image/perspectiveCorrection.js",
+  "./js/image/autoRotate.js",
+  "./js/image/manualRotate.js",
+  "./js/image/enhancer.js",
+  "./js/ocr/provider.js",
+  "./js/ocr/wordMapper.js",
+  "./js/layout/blockDetection.js",
+  "./js/layout/tableDetection.js",
+  "./js/layout/fieldDetection.js",
+  "./js/interpret/documentInterpreter.js",
+  "./js/ui/overlay.js",
+  "./js/ui/zoom.js",
+  "./js/ui/capture.js",
   "./manifest.json",
   "./icons/icon.svg",
 ];
