@@ -1,7 +1,7 @@
-import { supabase } from "./supabaseClient.js?v=7";
-import { geocodeAddress } from "./geocode.js?v=7";
-import { optimizeTrip } from "./osrm.js?v=7";
-import { runOcr, parseOsFields, warmupOcr } from "./ocr.js?v=7";
+import { supabase } from "./supabaseClient.js?v=8";
+import { geocodeAddress } from "./geocode.js?v=8";
+import { optimizeTrip } from "./osrm.js?v=8";
+import { runOcr, parseOsFields, warmupOcr } from "./ocr.js?v=8";
 
 // ---------------------------------------------------------------- state
 let currentUser = null;
@@ -326,7 +326,7 @@ function renderOcrOverlay(overlay, linhas, imgWidth, imgHeight, previewImgEl) {
 // cadastro completo de OS e nas duas telas de "parada rápida". `resolveField` decide onde cada
 // botão de atribuir manda o texto, e `autoFill` decide o que fazer com os campos reconhecidos
 // automaticamente — cada tela resolve isso à sua própria maneira (IDs fixos vs. campos de form).
-function criarCapturaOcr({ fileInputs, previewWrap, previewImg, overlay, statusEl, rawWrap, rawText, opacitySlider, zoomSlider, resolveField, autoFill }) {
+function criarCapturaOcr({ fileInputs, previewWrap, previewImg, overlay, statusEl, rawWrap, rawText, opacitySlider, zoomSlider, tipoSelect, resolveField, autoFill }) {
   let ultimoOcr = null; // {linhas, imgWidth, imgHeight} — guardado pra poder redesenhar o overlay quando o zoom muda
 
   const resetZoom = () => {
@@ -354,7 +354,7 @@ function criarCapturaOcr({ fileInputs, previewWrap, previewImg, overlay, statusE
       await new Promise((resolve) => { previewImg.onload = resolve; previewImg.onerror = resolve; });
 
       statusEl.textContent = "Leitura concluída — selecione o texto na foto ou confira os campos.";
-      autoFill(parseOsFields(text));
+      autoFill(parseOsFields(text, tipoSelect?.value));
 
       rawWrap.classList.remove("hidden");
       if (linhas && linhas.length && imgWidth && imgHeight) {
@@ -422,6 +422,7 @@ criarCapturaOcr({
   rawText: $("ocr-raw-text"),
   opacitySlider: $("ocr-opacity"),
   zoomSlider: $("foto-zoom"),
+  tipoSelect: $("foto-tipo"),
   resolveField: (name) => $(name),
   autoFill: (fields) => {
     ultimaOrigemCadastro = "foto";
@@ -453,6 +454,7 @@ criarCapturaOcr({
   rawText: $("qp-ocr-raw-text"),
   opacitySlider: $("qp-ocr-opacity"),
   zoomSlider: $("qp-foto-zoom"),
+  tipoSelect: $("qp-foto-tipo"),
   resolveField: (name) => $("form-parada-rapida").elements[name],
   autoFill: (fields) => autoFillParadaRapida($("form-parada-rapida"), fields),
 });
@@ -467,6 +469,7 @@ criarCapturaOcr({
   rawText: $("qpd-ocr-raw-text"),
   opacitySlider: $("qpd-ocr-opacity"),
   zoomSlider: $("qpd-foto-zoom"),
+  tipoSelect: $("qpd-foto-tipo"),
   resolveField: (name) => $("form-parada-rapida-detalhe").elements[name],
   autoFill: (fields) => autoFillParadaRapida($("form-parada-rapida-detalhe"), fields),
 });

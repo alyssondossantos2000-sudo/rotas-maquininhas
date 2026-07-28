@@ -4,112 +4,12 @@
 // galeria, tipo um scan em altíssima resolução), não pra "comprimir" foto normal de câmera.
 const MAX_DIM_OCR = 4500;
 
-// Papel amassado/dobrado (comum em formulário que já foi manuseado) tem sombra que varia de um
-// canto pro outro da própria folha — um canto pode estar bem mais escuro que o outro na MESMA
-// foto. Nesse caso um contraste global não resolve (ou clareia demais um lado, ou deixa o outro
-// escuro). Estimamos o "branco do papel" em cada região (o máximo local numa grade grosseira) e
-// dividimos a imagem por esse fundo — isso achata a variação de sombra/dobra mantendo o contraste
-// real da tinta. Técnica conhecida como correção de campo plano (flat-field correction).
-function corrigirSombraLocal(cinzas, w, h) {
-  const blocoTam = Math.max(16, Math.round(Math.min(w, h) / 24));
-  const gridW = Math.ceil(w / blocoTam);
-  const gridH = Math.ceil(h / blocoTam);
-  const fundoGrade = new Float32Array(gridW * gridH);
-
-  for (let gy = 0; gy < gridH; gy++) {
-    for (let gx = 0; gx < gridW; gx++) {
-      const x0 = gx * blocoTam, y0 = gy * blocoTam;
-      const x1 = Math.min(w, x0 + blocoTam), y1 = Math.min(h, y0 + blocoTam);
-      let max = 1;
-      for (let y = y0; y < y1; y++) {
-        const rowBase = y * w;
-        for (let x = x0; x < x1; x++) {
-          const v = cinzas[rowBase + x];
-          if (v > max) max = v;
-        }
-      }
-      fundoGrade[gy * gridW + gx] = max;
-    }
-  }
-
-  // Uint8ClampedArray (não Float32Array) por economia de memória — em resolução alta (foto em
-  // qualidade total) essa escolha sozinha corta ~75% da memória desse buffer, o que importa pra
-  // não estourar a memória do navegador no celular.
-  const corrigido = new Uint8ClampedArray(w * h);
-  for (let y = 0; y < h; y++) {
-    const gy = Math.min(gridH - 1, y / blocoTam);
-    const gy0 = Math.floor(gy), gy1 = Math.min(gridH - 1, gy0 + 1);
-    const fy = gy - gy0;
-    for (let x = 0; x < w; x++) {
-      const gx = Math.min(gridW - 1, x / blocoTam);
-      const gx0 = Math.floor(gx), gx1 = Math.min(gridW - 1, gx0 + 1);
-      const fx = gx - gx0;
-      const topo = fundoGrade[gy0 * gridW + gx0] * (1 - fx) + fundoGrade[gy0 * gridW + gx1] * fx;
-      const base = fundoGrade[gy1 * gridW + gx0] * (1 - fx) + fundoGrade[gy1 * gridW + gx1] * fx;
-      const fundo = Math.max(1, topo * (1 - fy) + base * fy);
-      corrigido[y * w + x] = (cinzas[y * w + x] / fundo) * 235;
-    }
-  }
-  return corrigido;
-}
-
-// Converte pra tons de cinza, achata sombra/dobra desigual (corrigirSombraLocal) e depois "estica"
-// o contraste — em vez de usar o pixel mais escuro/claro bruto (um brilho de flash ou uma sombra
-// num cantinho já estraga a conta), corta 1% mais extremo de cada lado do histograma antes de
-// esticar, pra ficar robusto a ruído de câmera. Por fim aplica nitidez leve (realça borda de letra
-// pequena, que sai meio "borrada" em foto tirada a pulso). Isso ajuda MUITO o Tesseract a ler foto
-// de papel de formulário real (dobrado, com sombra desigual, pouca luz).
-function aplicarCinzaEContraste(ctx, w, h) {
-  const imgData = ctx.getImageData(0, 0, w, h);
-  const px = imgData.data;
-  const n = w * h;
-  const cinzas = new Uint8ClampedArray(n);
-
-  for (let i = 0, j = 0; i < px.length; i += 4, j++) {
-    cinzas[j] = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
-  }
-
-  const semSombra = corrigirSombraLocal(cinzas, w, h);
-
-  const histograma = new Uint32Array(256);
-  for (let j = 0; j < n; j++) {
-    histograma[semSombra[j]]++;
-  }
-
-  const corte = Math.floor(n * 0.01);
-  let min = 0, max = 255, acumulado = 0;
-  for (let v = 0; v < 256; v++) {
-    acumulado += histograma[v];
-    if (acumulado > corte) { min = v; break; }
-  }
-  acumulado = 0;
-  for (let v = 255; v >= 0; v--) {
-    acumulado += histograma[v];
-    if (acumulado > corte) { max = v; break; }
-  }
-
-  const range = Math.max(1, max - min);
-  const contraste = new Uint8ClampedArray(n);
-  for (let j = 0; j < n; j++) {
-    contraste[j] = ((semSombra[j] - min) / range) * 255;
-  }
-
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const idx = y * w + x;
-      let valor = contraste[idx];
-      if (x > 0 && x < w - 1 && y > 0 && y < h - 1) {
-        const vizinhos = contraste[idx - w] + contraste[idx + w] + contraste[idx - 1] + contraste[idx + 1];
-        valor = contraste[idx] * 3 - vizinhos / 2;
-      }
-      const v = Math.max(0, Math.min(255, valor));
-      const p = idx * 4;
-      px[p] = px[p + 1] = px[p + 2] = v;
-    }
-  }
-
-  ctx.putImageData(imgData, 0, 0);
-}
+// Testado (2026-07-28) contraste manual + correção de sombra + nitidez artificial contra a foto
+// crua (só rotação corrigida) na mesma foto real: a versão SEM esse pré-processamento reconheceu
+// mais palavras com conteúdo de verdade (305 de 444) do que a versão COM ele (270 de 425). O motor
+// LSTM do Tesseract já faz sua própria normalização internamente e piora quando "ajudamos" demais
+// com contraste/nitidez artificial — por isso passamos a foto praticamente crua (só rotação
+// corrigida) pro Tesseract, sem tentar re-inventar o pré-processamento dele.
 
 // Desenha o bitmap num canvas girado pelos graus indicados (sentido horário), com o maior lado
 // limitado a maxDim. Usado tanto pra pré-visualização rápida (detecção de rotação) quanto pra
@@ -173,13 +73,6 @@ async function processarImagem(file, maxDim = MAX_DIM_OCR, onProgress) {
   const canvas = desenharGirado(bitmap, correcao, maxDim);
   bitmap.close?.();
   const w = canvas.width, h = canvas.height;
-  const ctx = canvas.getContext("2d");
-
-  try {
-    aplicarCinzaEContraste(ctx, w, h);
-  } catch (err) {
-    console.error("Não foi possível melhorar o contraste da imagem:", err);
-  }
 
   const blob = await canvasParaBlob(canvas, 0.9);
   return { blob: blob || file, width: w, height: h, anguloCorrigido: correcao };
@@ -281,47 +174,73 @@ function firstMatch(text, patterns) {
 // "=" ou ":" solto) e continua procurando a próxima ocorrência do mesmo rótulo no texto. Formulário
 // com um cabeçalho de seção repetindo o nome do campo (ex: "DADOS DO CLIENTE:" antes do "Cliente:"
 // de verdade) faz a busca simples parar cedo demais na ocorrência errada.
-function firstMatchComConteudo(text, patterns) {
+function firstMatchFiltrado(text, patterns, valorValido) {
   for (const re of patterns) {
     const flags = re.flags.includes("g") ? re.flags : re.flags + "g";
     const global = new RegExp(re.source, flags);
     let m;
     while ((m = global.exec(text))) {
       const valor = (m[1] || "").trim();
-      if (/[a-zà-ÿ]{2,}/i.test(valor)) return valor;
+      if (valorValido(valor)) return valor;
       if (m.index === global.lastIndex) global.lastIndex++; // evita loop infinito em match vazio
     }
   }
   return "";
 }
+const firstMatchComConteudo = (text, patterns) => firstMatchFiltrado(text, patterns, (v) => /[a-zà-ÿ]{2,}/i.test(v));
+// Muitos formulários têm "Número da OS" como CABEÇALHO DE COLUNA de uma tabela (ex: "TIPO DE
+// SERVIÇO | NÚMERO DA OS | DATA | SLA | ..."), sem dois-pontos e sem número embaixo na mesma
+// linha reconhecida — a busca simples capturava a palavra seguinte ("DATA") como se fosse o
+// número da OS. Só aceita a captura se tiver pelo menos 2 dígitos de verdade.
+const firstMatchComDigito = (text, patterns) => firstMatchFiltrado(text, patterns, (v) => /\d{2,}/.test(v));
 
 function onlyDigits(s) { return (s || "").replace(/\D/g, ""); }
 
+// Nos formulários muitas vezes vários campos ficam na mesma linha (colunas lado a lado, ou o
+// OCR gruda um pedaço do campo vizinho na mesma "linha" detectada) — então a captura de um campo
+// de texto livre para no próximo rótulo conhecido, não só na quebra de linha ou no fim do texto.
+const LABEL_WORDS = "N[UÚ]MERO|N[°ºO]\\.?\\s*OS|DATA|CEP|CIDADE|BAIRRO|CONTATO|CELULAR|RAZ[AÃ]O|NOME|CLIENTE|ENDERE[CÇ]O|REFER[EÊ]NCIA|TIPO|RAMO|PRAZO|VALOR|C[OÓ]D|DOC|MERCHANT|TOKEN";
+const NEXT_LABEL = `(?=\\s{2,}|\\s+(?:${LABEL_WORDS})\\b|$)`;
+
 // Tenta extrair campos de OS a partir do texto reconhecido, cobrindo os padrões mais comuns
 // de formulários reais (C6/FedEx, Cielo, Azulzinha X, Sicredi, C-Trends, etc).
+// `tipoSelecionado` (opcional): quando o usuário sabe de antemão qual é o tipo de máquina/
+// formulário (menu na tela de foto), usamos isso pra acertar o banco direto (sem adivinhar) e
+// pra priorizar o rótulo certo de cada layout (ex: Sicredi usa "Razão Social", não "Cliente").
 // Não é perfeito: o usuário sempre confere/edita antes de salvar.
-export function parseOsFields(rawText) {
+export function parseOsFields(rawText, tipoSelecionado) {
   const text = rawText.replace(/\r/g, "");
   const result = { numero_os: "", nome_cliente: "", endereco: "", banco: "", servico: "", contato: "" };
 
-  result.numero_os = firstMatch(text, [
+  result.numero_os = firstMatchComDigito(text, [
     /n[uú]mero\s*(?:da\s*)?os\s*[:\-]?\s*([\w\-\/.]+)/i,
     /n[°ºo]\.?\s*os\s*[:\-]?\s*([\w\-\/.]+)/i,
     /refer[eê]ncia\s*[:\-]\s*([\w\-\/.]+)/i,
     /n[uú]mero\s*l[oó]gico\s*[:\-]\s*([\w\-\/.]+)/i,
+    /merchant\s*id\s*(?:\/\s*pv)?\s*[:\-]\s*([\w\-\/.]+)/i,
   ]);
   if (!result.numero_os) {
     const m = text.match(/\b\d{5,15}\b/);
     if (m) result.numero_os = m[0];
   }
 
+  // Formulário tipo Sicredi identifica o cliente por "Razão Social", não por "Cliente:" — sem
+  // saber isso, a busca genérica às vezes acerta um "cliente" solto (ex: cabeçalho de seção)
+  // antes de chegar no rótulo certo. Sabendo o tipo, tentamos o rótulo certo primeiro.
+  const padroesCliente = /sicredi/i.test(tipoSelecionado || "")
+    ? [
+        new RegExp("raz[aã]o\\s*social\\s*[:\\-]\\s*(.+?)" + NEXT_LABEL, "im"),
+        new RegExp("\\bcliente\\s*[:\\-]\\s*(.+?)" + NEXT_LABEL, "im"),
+        /nome\s*fantasia\s*[:\-]\s*(.+)/i,
+      ]
+    : [
+        new RegExp("\\bcliente\\s*[:\\-]\\s*(.+?)" + NEXT_LABEL, "im"),
+        /nome\s*fantasia\s*[:\-]\s*(.+)/i,
+        new RegExp("raz[aã]o\\s*social\\s*[:\\-]\\s*(.+?)" + NEXT_LABEL, "im"),
+      ];
   // Sem ^ ancorando início de linha: às vezes o OCR pega um resíduo de ruído antes do rótulo
   // ("ao Cliente: ...") e isso fazia a extração falhar por completo mesmo com o rótulo certinho.
-  result.nome_cliente = firstMatchComConteudo(text, [
-    /\bcliente\s*[:\-]\s*(.+)$/im,
-    /nome\s*fantasia\s*[:\-]\s*(.+)/i,
-    /raz[aã]o\s*social\s*[:\-]\s*(.+)/i,
-  ]);
+  result.nome_cliente = firstMatchComConteudo(text, padroesCliente);
 
   const enderecoBase = firstMatch(text, [/endere[cç]o\s*[:\-]\s*(.+)/i]);
   const bairro = firstMatch(text, [/bairro\s*[:\-]\s*(.+)/i]);
@@ -329,19 +248,21 @@ export function parseOsFields(rawText) {
   const cep = firstMatch(text, [/\bcep\s*[:\-]?\s*(\d{5}[\-.]?\d{3})\b/i]);
   result.endereco = [enderecoBase, bairro, cidade, cep].filter(Boolean).join(", ");
 
-  // Nos formulários muitas vezes vários campos ficam na mesma linha (colunas lado a lado),
-  // então a captura do serviço para no próximo rótulo conhecido, não só na quebra de linha.
-  const labelWords = "N[UÚ]MERO|N[°ºO]\\.?\\s*OS|DATA|CEP|CIDADE|BAIRRO|CONTATO|CELULAR|RAZ[AÃ]O|NOME|ENDERE[CÇ]O|REFER[EÊ]NCIA|TIPO|RAMO|PRAZO|VALOR|C[OÓ]D|DOC";
-  const nextLabel = `(?=\\s{2,}|\\s+(?:${labelWords})\\b|$)`;
   result.servico = firstMatch(text, [
-    new RegExp("tipo\\s*(?:de\\s*)?servi[cç]o\\s*[:\\-]\\s*(.+?)" + nextLabel, "im"),
-    new RegExp("\\bservi[cç]o\\s*[:\\-]\\s*(.+?)" + nextLabel, "im"),
+    new RegExp("tipo\\s*(?:de\\s*)?servi[cç]o\\s*[:\\-]\\s*(.+?)" + NEXT_LABEL, "im"),
+    new RegExp("\\bservi[cç]o\\s*[:\\-]\\s*(.+?)" + NEXT_LABEL, "im"),
   ]);
 
-  result.banco = firstMatch(text, [/\bbanco\s*[:\-]\s*(.+)/i]);
-  if (!result.banco) {
-    for (const [re, label] of BRAND_PATTERNS) {
-      if (re.test(text)) { result.banco = label; break; }
+  // Sabendo o tipo de antemão (menu na tela de foto), não precisa adivinhar o banco — evita
+  // pegar uma marca errada que só aparece de passagem no texto (ex: lista de bandeiras aceitas).
+  if (tipoSelecionado) {
+    result.banco = tipoSelecionado;
+  } else {
+    result.banco = firstMatch(text, [/\bbanco\s*[:\-]\s*(.+)/i]);
+    if (!result.banco) {
+      for (const [re, label] of BRAND_PATTERNS) {
+        if (re.test(text)) { result.banco = label; break; }
+      }
     }
   }
 

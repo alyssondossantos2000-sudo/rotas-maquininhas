@@ -9,7 +9,7 @@
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/icon.svg">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="css/style.css?v=7">
+<link rel="stylesheet" href="css/style.css?v=8">
 </head>
 <body>
 
@@ -61,6 +61,26 @@
     </div>
 
     <div id="tab-foto" class="tab-panel hidden">
+      <label>Tipo de máquina/formulário (se souber, acerta mais)
+        <select id="foto-tipo">
+          <option value="">Detectar automaticamente</option>
+          <option value="C6 Bank">C6 Bank</option>
+          <option value="Cielo">Cielo</option>
+          <option value="Stone">Stone</option>
+          <option value="GetNet">GetNet</option>
+          <option value="PagBank">PagBank</option>
+          <option value="Sicredi">Sicredi</option>
+          <option value="SafraPay">SafraPay</option>
+          <option value="Mercado Pago">Mercado Pago</option>
+          <option value="Azulzinha">Azulzinha</option>
+          <option value="Vero">Vero</option>
+          <option value="Fiserv">Fiserv</option>
+          <option value="InfinitePay">InfinitePay</option>
+          <option value="C-Trends">C-Trends</option>
+          <option value="Rede">Rede</option>
+          <option value="Ton">Ton</option>
+        </select>
+      </label>
       <div class="btn-row">
         <label class="btn btn-secondary" for="foto-input-camera">📷 Tirar foto</label>
         <label class="btn btn-secondary" for="foto-input-galeria">🖼️ Da galeria</label>
@@ -140,6 +160,26 @@
 
     <button type="button" id="btn-toggle-parada-rapida-build" class="btn btn-secondary btn-block">+ Adicionar parada rápida</button>
     <div id="parada-rapida-build-wrap" class="hidden">
+      <label>Tipo de máquina/formulário (se souber, acerta mais)
+        <select id="qp-foto-tipo">
+          <option value="">Detectar automaticamente</option>
+          <option value="C6 Bank">C6 Bank</option>
+          <option value="Cielo">Cielo</option>
+          <option value="Stone">Stone</option>
+          <option value="GetNet">GetNet</option>
+          <option value="PagBank">PagBank</option>
+          <option value="Sicredi">Sicredi</option>
+          <option value="SafraPay">SafraPay</option>
+          <option value="Mercado Pago">Mercado Pago</option>
+          <option value="Azulzinha">Azulzinha</option>
+          <option value="Vero">Vero</option>
+          <option value="Fiserv">Fiserv</option>
+          <option value="InfinitePay">InfinitePay</option>
+          <option value="C-Trends">C-Trends</option>
+          <option value="Rede">Rede</option>
+          <option value="Ton">Ton</option>
+        </select>
+      </label>
       <div class="btn-row">
         <label class="btn btn-secondary" for="qp-foto-input-camera">📷 Tirar foto</label>
         <label class="btn btn-secondary" for="qp-foto-input-galeria">🖼️ Da galeria</label>
@@ -199,6 +239,26 @@
 
     <button type="button" id="btn-toggle-parada-rapida" class="btn btn-secondary btn-block">+ Adicionar parada nesta rota</button>
     <div id="parada-rapida-detalhe-wrap" class="hidden">
+      <label>Tipo de máquina/formulário (se souber, acerta mais)
+        <select id="qpd-foto-tipo">
+          <option value="">Detectar automaticamente</option>
+          <option value="C6 Bank">C6 Bank</option>
+          <option value="Cielo">Cielo</option>
+          <option value="Stone">Stone</option>
+          <option value="GetNet">GetNet</option>
+          <option value="PagBank">PagBank</option>
+          <option value="Sicredi">Sicredi</option>
+          <option value="SafraPay">SafraPay</option>
+          <option value="Mercado Pago">Mercado Pago</option>
+          <option value="Azulzinha">Azulzinha</option>
+          <option value="Vero">Vero</option>
+          <option value="Fiserv">Fiserv</option>
+          <option value="InfinitePay">InfinitePay</option>
+          <option value="C-Trends">C-Trends</option>
+          <option value="Rede">Rede</option>
+          <option value="Ton">Ton</option>
+        </select>
+      </label>
       <div class="btn-row">
         <label class="btn btn-secondary" for="qpd-foto-input-camera">📷 Tirar foto</label>
         <label class="btn btn-secondary" for="qpd-foto-input-galeria">🖼️ Da galeria</label>
@@ -276,6 +336,6 @@
 <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
-<script type="module" src="js/app.js?v=7"></script>
+<script type="module" src="js/app.js?v=8"></script>
 </body>
 </html>
