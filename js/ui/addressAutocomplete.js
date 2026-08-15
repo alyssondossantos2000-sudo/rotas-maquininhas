@@ -13,7 +13,7 @@
 // rua já é uma base boa o bastante (endereço de casa exato raramente tá mapeado em cidade pequena,
 // mas a rua certa sim). A escolha só é invalidada (`onSelect(null)`) se o texto deixar de começar
 // com o rótulo escolhido — ou seja, se a parte escolhida for apagada/alterada, não só complementada.
-import { buscarSugestoesEndereco } from "../geocode.js?v=27";
+import { buscarSugestoesEndereco } from "../geocode.js?v=28";
 
 // `buscarFn` é injetável (ao invés de sempre importar direto) pra esse mesmo componente também
 // servir o campo de "cidade base" da tela Perfil, que usa uma busca sem restrição de área
@@ -29,13 +29,17 @@ function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-export function criarAutocompleteEndereco(input, onSelect, buscarFn = buscarSugestoesEndereco) {
+// `botaoBuscar` (opcional): botão de lupa já presente no HTML ao lado do campo — só pra buscar e
+// mostrar no mapa na hora, sem precisar escolher da lista (ex: usuário quer conferir um endereço
+// que já digitou por completo). Movido pra dentro do wrap pra ficar visualmente colado no campo.
+export function criarAutocompleteEndereco(input, onSelect, buscarFn = buscarSugestoesEndereco, botaoBuscar = null) {
   if (!input) return;
 
   const wrap = document.createElement("div");
   wrap.className = "address-input-wrap";
   input.parentNode.insertBefore(wrap, input);
   wrap.appendChild(input);
+  if (botaoBuscar) wrap.appendChild(botaoBuscar);
 
   const lista = document.createElement("div");
   lista.className = "address-suggestions hidden";

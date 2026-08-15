@@ -1,9 +1,9 @@
-import { supabase } from "./supabaseClient.js?v=27";
-import { geocodeAddress, lerPerfilBusca, salvarPerfilBusca, buscarSugestoesCidade, RAIO_MIN_PADRAO_KM, RAIO_MAX_PADRAO_KM } from "./geocode.js?v=27";
-import { optimizeTrip, routeInOrder } from "./osrm.js?v=27";
-import { criarCapturaDocumento, prepararPipeline, recuperarFotoInterrompida } from "./ui/capture.js?v=27";
-import { lerConfigServidorLocal, salvarConfigServidorLocal, criarLocalServerProvider } from "./ocr/localServerProvider.js?v=27";
-import { criarAutocompleteEndereco } from "./ui/addressAutocomplete.js?v=27";
+import { supabase } from "./supabaseClient.js?v=28";
+import { geocodeAddress, lerPerfilBusca, salvarPerfilBusca, buscarSugestoesCidade, RAIO_MIN_PADRAO_KM, RAIO_MAX_PADRAO_KM } from "./geocode.js?v=28";
+import { optimizeTrip, routeInOrder } from "./osrm.js?v=28";
+import { criarCapturaDocumento, prepararPipeline, recuperarFotoInterrompida } from "./ui/capture.js?v=28";
+import { lerConfigServidorLocal, salvarConfigServidorLocal, criarLocalServerProvider } from "./ocr/localServerProvider.js?v=28";
+import { criarAutocompleteEndereco } from "./ui/addressAutocomplete.js?v=28";
 
 // ---------------------------------------------------------------- state
 let currentUser = null;
@@ -347,23 +347,21 @@ function openOsForm(id) {
   showView("os-form");
 }
 
-// Sugestão escolhida na lista de autocomplete já vem com lat/lng exata da própria escolha do
-// usuário — nada de chute ou fallback progressivo depois disso (ver geocode.js). Qualquer edição
-// manual do texto invalida a escolha (onSelect(null)) e volta a exigir geocodificação no envio.
-criarAutocompleteEndereco($("os-endereco"), (sugestao) => {
-  osFormPin = sugestao ? { lat: sugestao.lat, lng: sugestao.lng } : null;
-});
-
-$("btn-ajustar-mapa").addEventListener("click", async () => {
+// Mostra/atualiza o mini-mapa da OS. `recentralizar`: força recentralizar no ponto atual mesmo se
+// o mapa já estava aberto (usado ao escolher uma sugestão nova ou clicar na lupa de buscar) — sem
+// isso, reabrir um mapa já visível só reajusta o tamanho, sem mudar o pino de lugar.
+async function mostrarMapaOsForm(recentralizar = false) {
   const wrap = $("os-map-wrap");
   const statusEl = $("os-map-status");
   const wasHidden = wrap.classList.contains("hidden");
   wrap.classList.remove("hidden");
-  if (!wasHidden && osFormMap) { setTimeout(() => osFormMap.invalidateSize(), 50); return; }
+  if (!recentralizar && !wasHidden && osFormMap) { setTimeout(() => osFormMap.invalidateSize(), 50); return; }
 
   let start = osFormPin;
   let zoom = 15;
-  if (!start) {
+  if (start) {
+    statusEl.textContent = "Arraste o marcador se precisar ajustar.";
+  } else {
     const endereco = $("os-endereco").value.trim();
     if (endereco) {
       statusEl.textContent = "Localizando endereço...";
@@ -392,7 +390,21 @@ $("btn-ajustar-mapa").addEventListener("click", async () => {
     statusEl.textContent = "Localização ajustada manualmente.";
   });
   setTimeout(() => osFormMap.invalidateSize(), 100);
-});
+}
+
+// Sugestão escolhida na lista de autocomplete já vem com lat/lng exata da própria escolha do
+// usuário — nada de chute ou fallback progressivo depois disso (ver geocode.js). Qualquer edição
+// manual do texto invalida a escolha (onSelect(null)) e volta a exigir geocodificação no envio.
+// Escolher uma sugestão já mostra o mini-mapa na hora, sem precisar tocar em mais nada — só quando
+// digita sem escolher (ou apaga) é que precisa da lupa ou do botão "Ver/ajustar" pra conferir.
+criarAutocompleteEndereco($("os-endereco"), (sugestao) => {
+  osFormPin = sugestao ? { lat: sugestao.lat, lng: sugestao.lng } : null;
+  if (sugestao) mostrarMapaOsForm(true);
+}, undefined, $("os-endereco-buscar"));
+
+$("os-endereco-buscar").addEventListener("click", () => mostrarMapaOsForm(true));
+
+$("btn-ajustar-mapa").addEventListener("click", () => mostrarMapaOsForm());
 
 $("btn-os-cancel").addEventListener("click", () => { showView("os-list"); loadOsList(); });
 

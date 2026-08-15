@@ -2,7 +2,7 @@
 // limite de taxa bem mais folgado no plano grátis (2 req/seg vs 1 req/seg, sem risco de bloqueio
 // por uso "pesado demais" — problema real que já aconteceu testando esse app). Resposta no mesmo
 // formato do Nominatim (é literalmente Nominatim por baixo), só muda a URL e a chave.
-import { LOCATIONIQ_KEY } from "./config.js?v=27";
+import { LOCATIONIQ_KEY } from "./config.js?v=28";
 
 const cache = new Map();
 const MIN_INTERVAL_MS = 550; // plano grátis do LocationIQ: 2 req/seg — 550ms dá uma margem pequena de segurança

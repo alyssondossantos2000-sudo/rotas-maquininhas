@@ -9,7 +9,7 @@
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/icon.svg">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="css/style.css?v=27">
+<link rel="stylesheet" href="css/style.css?v=28">
 </head>
 <body>
 
@@ -133,7 +133,7 @@
       <input type="hidden" id="os-id">
       <label>Número da OS (opcional)<input type="text" id="os-numero"></label>
       <label>Nome do cliente (opcional)<input type="text" id="os-cliente"></label>
-      <label>Endereço completo *<textarea id="os-endereco" rows="2" required placeholder="Rua, número, bairro, cidade - UF"></textarea></label>
+      <label>Endereço completo *<textarea id="os-endereco" rows="2" required placeholder="Rua, número, bairro, cidade - UF"></textarea><button type="button" id="os-endereco-buscar" class="btn-buscar-endereco" title="Buscar endereço e mostrar no mapa">🔍</button></label>
       <button type="button" id="btn-ajustar-mapa" class="btn btn-secondary btn-block">🗺️ Ver/ajustar localização no mapa</button>
       <div id="os-map-wrap" class="hidden">
         <div id="os-map"></div>
@@ -368,6 +368,6 @@
      Pages) essa tag dá 404 inofensivo, o código só usa window.NativePlugins quando roda dentro
      do app nativo. Ver native/entry.js. -->
 <script src="vendor/native-plugins.js"></script>
-<script type="module" src="js/app.js?v=27"></script>
+<script type="module" src="js/app.js?v=28"></script>
 </body>
 </html>

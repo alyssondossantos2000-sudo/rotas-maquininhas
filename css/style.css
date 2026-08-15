@@ -90,7 +90,13 @@ form{display:flex; flex-direction:column}
 .checkbox-row input[type=checkbox]{width:20px; height:20px; flex:none}
 
 /* ---- sugestões de endereço (autocomplete) ---- */
-.address-input-wrap{position:relative}
+.address-input-wrap{position:relative; display:flex; gap:8px; align-items:stretch}
+.address-input-wrap textarea{flex:1; min-width:0}
+.btn-buscar-endereco{
+  flex:none; width:48px; border:1px solid var(--border); border-radius:10px;
+  background:var(--card-2); color:var(--text); font-size:18px; cursor:pointer;
+}
+.btn-buscar-endereco:active{background:var(--card)}
 .address-suggestions{
   position:absolute; left:0; right:0; top:calc(100% + 4px); z-index:30;
   background:var(--card-2); border:1px solid var(--border); border-radius:10px;
