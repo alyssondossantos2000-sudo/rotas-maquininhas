@@ -1,9 +1,9 @@
-import { supabase } from "./supabaseClient.js?v=21";
-import { geocodeAddress } from "./geocode.js?v=21";
-import { optimizeTrip, routeInOrder } from "./osrm.js?v=21";
-import { criarCapturaDocumento, prepararPipeline, recuperarFotoInterrompida } from "./ui/capture.js?v=21";
-import { lerConfigServidorLocal, salvarConfigServidorLocal, criarLocalServerProvider } from "./ocr/localServerProvider.js?v=21";
-import { criarAutocompleteEndereco } from "./ui/addressAutocomplete.js?v=21";
+import { supabase } from "./supabaseClient.js?v=23";
+import { geocodeAddress } from "./geocode.js?v=23";
+import { optimizeTrip, routeInOrder } from "./osrm.js?v=23";
+import { criarCapturaDocumento, prepararPipeline, recuperarFotoInterrompida } from "./ui/capture.js?v=23";
+import { lerConfigServidorLocal, salvarConfigServidorLocal, criarLocalServerProvider } from "./ocr/localServerProvider.js?v=23";
+import { criarAutocompleteEndereco } from "./ui/addressAutocomplete.js?v=23";
 
 // ---------------------------------------------------------------- state
 let currentUser = null;

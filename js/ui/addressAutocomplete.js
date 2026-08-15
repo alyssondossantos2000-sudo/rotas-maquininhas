@@ -3,15 +3,22 @@
 // opção, `onSelect({label, lat, lng})` recebe a coordenada EXATA daquela sugestão — quem chamou
 // não precisa geocodificar de novo no envio do formulário.
 //
-// Depois de escolher, o usuário ainda pode COMPLETAR o texto (ex: escolhe "Rua Felipe de Brum,
-// Bairro X" e digita " 310" no final pra acrescentar o número da casa) sem perder a coordenada
-// escolhida — só nesse caso, a rua já achada é uma base boa o bastante (endereço de casa exato raramente
-// tá mapeado no OpenStreetMap em cidade pequena, mas a rua certa sim). A escolha só é invalidada
-// (`onSelect(null)`) se o texto deixar de começar com o rótulo escolhido — ou seja, se a parte que
-// foi escolhida for apagada/alterada, não só complementada.
-import { buscarSugestoesEndereco } from "../geocode.js?v=21";
+// O campo recebe só a RUA (`s.label`), sem o bairro junto — o bairro aparece na lista só como
+// contexto pra ajudar a reconhecer a opção certa, mas não é escrito no campo. Assim, completar com
+// o número da casa é só continuar digitando no final ("Rua Felipe de Brum" + " 310"), sem precisar
+// inserir nada no meio do texto. Bug real reportado: com rua+bairro juntos no campo ("Rua Felipe de
+// Brum, Granja"), o número tinha que entrar ENTRE os dois, não no final.
+//
+// Depois de escolher, o usuário ainda pode COMPLETAR o texto sem perder a coordenada escolhida — a
+// rua já é uma base boa o bastante (endereço de casa exato raramente tá mapeado em cidade pequena,
+// mas a rua certa sim). A escolha só é invalidada (`onSelect(null)`) se o texto deixar de começar
+// com o rótulo escolhido — ou seja, se a parte escolhida for apagada/alterada, não só complementada.
+import { buscarSugestoesEndereco } from "../geocode.js?v=23";
 
-const DEBOUNCE_MS = 450;
+// O mais curto que dá sem virar barulho: o gargalo real de velocidade é o limite de taxa do
+// LocationIQ (ver filaSugestoes em geocode.js), não esse debounce — baixar mais isso só manda mais
+// requisição descartada enquanto a pessoa ainda tá digitando.
+const DEBOUNCE_MS = 300;
 const MIN_CHARS = 3;
 
 function escapeHtml(s) {
@@ -43,6 +50,11 @@ export function criarAutocompleteEndereco(input, onSelect) {
     indiceAtivo = -1;
   }
 
+  function mostrarCarregando() {
+    lista.innerHTML = `<div class="address-suggestion-loading">Buscando...</div>`;
+    lista.classList.remove("hidden");
+  }
+
   function marcarAtivo() {
     lista.querySelectorAll(".address-suggestion-item").forEach((el, i) => el.classList.toggle("active", i === indiceAtivo));
   }
@@ -60,7 +72,10 @@ export function criarAutocompleteEndereco(input, onSelect) {
     sugestoesAtuais = sugestoes;
     indiceAtivo = -1;
     if (!sugestoes.length) { esconder(); return; }
-    lista.innerHTML = sugestoes.map((s, i) => `<div class="address-suggestion-item" data-idx="${i}">${escapeHtml(s.label)}</div>`).join("");
+    lista.innerHTML = sugestoes.map((s, i) => `
+      <div class="address-suggestion-item" data-idx="${i}">
+        ${escapeHtml(s.label)}${s.contexto ? `<span class="address-suggestion-contexto"> — ${escapeHtml(s.contexto)}</span>` : ""}
+      </div>`).join("");
     lista.classList.remove("hidden");
     // pointerdown (não click) + preventDefault: mantém o foco no campo, então nem dispara o blur
     // que ia esconder a lista antes do clique "colar" — mesmo truque já usado no fluxo de OCR.
@@ -78,6 +93,7 @@ export function criarAutocompleteEndereco(input, onSelect) {
     }
     clearTimeout(timer);
     if (valor.length < MIN_CHARS) { esconder(); return; }
+    if (!aindaComplementando) mostrarCarregando(); // feedback imediato — a busca em si ainda leva um instante (ver geocode.js)
     const minhaVez = ++sequencia;
     timer = setTimeout(async () => {
       const sugestoes = await buscarSugestoesEndereco(valor);
@@ -85,7 +101,7 @@ export function criarAutocompleteEndereco(input, onSelect) {
       // Complementando um endereço já escolhido (ex: acrescentando o número da casa): se a busca
       // não achar nada mais específico, mantém a lista fechada em vez de forçar um dropdown vazio
       // por cima da coordenada que já está boa.
-      if (aindaComplementando && !sugestoes.length) return;
+      if (aindaComplementando && !sugestoes.length) { esconder(); return; }
       renderizar(sugestoes);
     }, DEBOUNCE_MS);
   });

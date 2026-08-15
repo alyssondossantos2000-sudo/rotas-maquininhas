@@ -1,8 +1,32 @@
-// Geocodificação via Nominatim (OpenStreetMap) - gratuito, limite de 1 req/seg.
+// Geocodificação via LocationIQ — mesmos dados do OpenStreetMap que o Nominatim público, mas com
+// limite de taxa bem mais folgado no plano grátis (2 req/seg vs 1 req/seg, sem risco de bloqueio
+// por uso "pesado demais" — problema real que já aconteceu testando esse app). Resposta no mesmo
+// formato do Nominatim (é literalmente Nominatim por baixo), só muda a URL e a chave.
+import { LOCATIONIQ_KEY } from "./config.js?v=23";
+
 const cache = new Map();
-let queue = Promise.resolve();
-const MIN_INTERVAL_MS = 1100;
-let lastCall = 0;
+const MIN_INTERVAL_MS = 550; // plano grátis do LocationIQ: 2 req/seg — 550ms dá uma margem pequena de segurança
+
+// Duas filas SEPARADAS de limite de taxa: uma pro fallback progressivo do geocodeAddress (só roda
+// no envio do formulário, pode esperar) e outra só pras sugestões ao vivo do autocomplete (o
+// usuário está olhando pra tela esperando resposta — não pode ficar preso atrás de tentativas de
+// outra busca que não tem nada a ver). Cada fila ainda respeita sozinha o limite de taxa, só não
+// competem uma com a outra.
+function criarFila() {
+  let fila = Promise.resolve();
+  let ultimaChamada = 0;
+  return function throttledFetch(url) {
+    fila = fila.then(async () => {
+      const espera = Math.max(0, MIN_INTERVAL_MS - (Date.now() - ultimaChamada));
+      if (espera > 0) await new Promise((r) => setTimeout(r, espera));
+      ultimaChamada = Date.now();
+      return fetch(url, { headers: { Accept: "application/json" } });
+    });
+    return fila;
+  };
+}
+const filaEndereco = criarFila();
+const filaSugestoes = criarFila();
 
 // App limitado à região de Ponta Porã/MS (inclui os distritos de Itamarati e Sanga Puitã,
 // que fazem parte do mesmo município) — evita que um endereço parecido de outra cidade do
@@ -10,19 +34,13 @@ let lastCall = 0;
 const PONTA_PORA_BBOX = { minLat: -22.7642905, maxLat: -21.6339890, minLon: -56.1123178, maxLon: -54.9764267 };
 const VIEWBOX = `${PONTA_PORA_BBOX.minLon},${PONTA_PORA_BBOX.maxLat},${PONTA_PORA_BBOX.maxLon},${PONTA_PORA_BBOX.minLat}`;
 
-function throttledFetch(url) {
-  queue = queue.then(async () => {
-    const wait = Math.max(0, MIN_INTERVAL_MS - (Date.now() - lastCall));
-    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-    lastCall = Date.now();
-    return fetch(url, { headers: { Accept: "application/json" } });
-  });
-  return queue;
+function baseUrl() {
+  return `https://us1.locationiq.com/v1/search?key=${LOCATIONIQ_KEY}&format=json&countrycodes=br&viewbox=${VIEWBOX}&bounded=1`;
 }
 
 async function buscarNominatim(query) {
-  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&viewbox=${VIEWBOX}&bounded=1&q=${encodeURIComponent(query)}`;
-  const res = await throttledFetch(url);
+  const url = `${baseUrl()}&limit=1&q=${encodeURIComponent(query)}`;
+  const res = await filaEndereco(url);
   const data = await res.json();
   if (!data || !data.length) return null;
   return {
@@ -31,8 +49,10 @@ async function buscarNominatim(query) {
     display: data[0].display_name,
     // addresstype/class dizem QUE TIPO de coisa foi encontrada (rua, casa, bairro...) vs só o
     // contorno de uma cidade/estado inteiro — usado logo abaixo pra saber se vale a pena continuar
-    // tentando algo mais específico antes de aceitar esse resultado.
-    addresstype: data[0].addresstype,
+    // tentando algo mais específico antes de aceitar esse resultado. O Nominatim público manda
+    // `addresstype`; testando contra o LocationIQ esse campo não vem (só `type`, que carrega a
+    // mesma informação) — checa os dois pra funcionar com qualquer um dos dois.
+    addresstype: data[0].addresstype || data[0].type,
     class: data[0].class,
   };
 }
@@ -129,30 +149,38 @@ export async function geocodeAddress(address) {
 }
 
 // Partes do fim de display_name que são sempre as mesmas nesse app (tudo é Ponta Porã/MS) — cortar
-// fora deixa a sugestão curta o bastante pra virar a base de um endereço editável (ex: escolhe "Rua
-// Felipe de Brum, Bairro X" e completa digitando "310" no final), em vez do texto gigante cru do
-// Nominatim com CEP/estado/região/país repetidos em toda sugestão.
+// fora deixa sobrar só rua + bairro.
 const PARTES_REDUNDANTES = new Set(["ponta porã", "mato grosso do sul", "região centro-oeste", "brasil"]);
-function rotuloConciso(displayName) {
+// Separa RUA (o que vai pro campo — completar com o número da casa precisa emendar direto nela,
+// sem nada no meio) de CONTEXTO/bairro (só pra ajudar a reconhecer a opção certa na lista, nunca
+// escrito no campo). Antes o rótulo juntava os dois com vírgula direto no campo — bug real
+// reportado: usuário escolhia "Rua Felipe de Brum, Granja" e, pra acrescentar o número da casa,
+// tinha que apagar e digitar de novo NO MEIO ("Rua Felipe de Brum 310, Granja") em vez de só
+// completar no final.
+function ruaEContexto(displayName) {
   const partes = displayName.split(",").map((p) => p.trim());
   const relevantes = partes.filter((p) => !PARTES_REDUNDANTES.has(p.toLowerCase()) && !/^\d{5}-?\d{3}$/.test(p));
-  return (relevantes.length ? relevantes : partes).slice(0, 2).join(", ");
+  const base = relevantes.length ? relevantes : partes;
+  return { rua: base[0] || displayName, contexto: base[1] || "" };
 }
 
-// Sugestões ao vivo (autocomplete) enquanto o usuário digita — mesma restrição geográfica e mesma
-// fila com limite de 1 req/seg do geocodeAddress acima (Nominatim é o mesmo serviço, respeitando o
-// mesmo limite de uso). Diferente de geocodeAddress, aqui NÃO tem fallback progressivo nem aceita
-// resultado genérico: é o usuário que escolhe a opção certa na lista, então cada sugestão já vem
-// com sua própria lat/lng exata — sem chute nenhum depois.
+// Sugestões ao vivo (autocomplete) enquanto o usuário digita. Fila própria (ver filaSugestoes
+// acima) — não fica presa atrás de uma busca de endereço não relacionada rodando em outro lugar do
+// app. Diferente de geocodeAddress, aqui NÃO tem fallback progressivo nem aceita resultado
+// genérico: é o usuário que escolhe a opção certa na lista, então cada sugestão já vem com sua
+// própria lat/lng exata — sem chute nenhum depois.
 export async function buscarSugestoesEndereco(query) {
   const q = query.trim();
   if (q.length < 3) return [];
-  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=br&viewbox=${VIEWBOX}&bounded=1&q=${encodeURIComponent(q)}`;
+  const url = `${baseUrl()}&limit=5&q=${encodeURIComponent(q)}`;
   try {
-    const res = await throttledFetch(url);
+    const res = await filaSugestoes(url);
     const data = await res.json();
     if (!Array.isArray(data)) return [];
-    return data.map((d) => ({ label: rotuloConciso(d.display_name), lat: parseFloat(d.lat), lng: parseFloat(d.lon) }));
+    return data.map((d) => {
+      const { rua, contexto } = ruaEContexto(d.display_name);
+      return { label: rua, contexto, lat: parseFloat(d.lat), lng: parseFloat(d.lon) };
+    });
   } catch (err) {
     console.error("Erro ao buscar sugestões de endereço:", err);
     return [];

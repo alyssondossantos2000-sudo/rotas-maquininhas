@@ -103,6 +103,8 @@ form{display:flex; flex-direction:column}
 }
 .address-suggestion-item:last-child{border-bottom:none}
 .address-suggestion-item.active, .address-suggestion-item:hover{background:var(--card)}
+.address-suggestion-contexto{color:var(--muted)}
+.address-suggestion-loading{padding:10px 14px; font-size:14px; color:var(--muted)}
 
 /* ---- ocr: servidor local do PC ---- */
 .ocr-local-config{
