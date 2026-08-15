@@ -7,7 +7,7 @@
 // — não dá pra `import` direto (especificador nu tipo "@capacitor/filesystem" só resolve com
 // bundler, e o projeto é zero-build-step). O único arquivo que passa por bundler é
 // native/entry.js, empacotado por scripts/build-www.mjs em www/vendor/native-plugins.js.
-import { comLog } from "../core/logger.js?v=19";
+import { comLog } from "../core/logger.js?v=20";
 
 function blobParaBase64(blob) {
   return new Promise((resolve, reject) => {

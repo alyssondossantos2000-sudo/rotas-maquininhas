@@ -5,18 +5,18 @@
 //        → interpretar campos → preencher UI
 //
 // Substitui o antigo criarCapturaOcr/renderOcrOverlay que moravam dentro de app.js.
-import { detectarDocumento } from "../image/documentDetector.js?v=19";
-import { corrigirPerspectiva } from "../image/perspectiveCorrection.js?v=19";
-import { desenharGirado, canvasParaBlob, calcularCorrecaoAutomatica } from "../image/autoRotate.js?v=19";
-import { proximaRotacaoManual } from "../image/manualRotate.js?v=19";
-import { talvezMelhorar } from "../image/enhancer.js?v=19";
-import { getOcrProvider, warmupOcr } from "../ocr/provider.js?v=19";
-import { normalizarResultado } from "../ocr/wordMapper.js?v=19";
-import { reconstruirLayout } from "../layout/blockDetection.js?v=19";
-import { interpretarDocumento, paraCamposDeOs } from "../interpret/documentInterpreter.js?v=19";
-import { renderizarOverlay } from "./overlay.js?v=19";
-import { criarControleZoom } from "./zoom.js?v=19";
-import { comLog } from "../core/logger.js?v=19";
+import { detectarDocumento } from "../image/documentDetector.js?v=20";
+import { corrigirPerspectiva } from "../image/perspectiveCorrection.js?v=20";
+import { desenharGirado, canvasParaBlob, calcularCorrecaoAutomatica } from "../image/autoRotate.js?v=20";
+import { proximaRotacaoManual } from "../image/manualRotate.js?v=20";
+import { talvezMelhorar } from "../image/enhancer.js?v=20";
+import { getOcrProvider, warmupOcr } from "../ocr/provider.js?v=20";
+import { normalizarResultado } from "../ocr/wordMapper.js?v=20";
+import { reconstruirLayout } from "../layout/blockDetection.js?v=20";
+import { interpretarDocumento, paraCamposDeOs } from "../interpret/documentInterpreter.js?v=20";
+import { renderizarOverlay } from "./overlay.js?v=20";
+import { criarControleZoom } from "./zoom.js?v=20";
+import { comLog } from "../core/logger.js?v=20";
 
 const CHAVE_CAPTURA_PENDENTE = "rm_captura_pendente_em";
 // Depois disso desiste de recuperar (foto velha demais / usuário já foi fazer outra coisa).

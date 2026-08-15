@@ -1,4 +1,4 @@
-const CACHE = "rotas-maquininhas-v3";
+const CACHE = "rotas-maquininhas-v4";
 const ASSETS = [
   "./",
   "./index.html",
@@ -23,6 +23,7 @@ const ASSETS = [
   "./js/ui/overlay.js",
   "./js/ui/zoom.js",
   "./js/ui/capture.js",
+  "./js/ui/addressAutocomplete.js",
   "./manifest.json",
   "./icons/icon.svg",
 ];

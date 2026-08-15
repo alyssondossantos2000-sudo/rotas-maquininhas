@@ -1,8 +1,9 @@
-import { supabase } from "./supabaseClient.js?v=19";
-import { geocodeAddress } from "./geocode.js?v=19";
-import { optimizeTrip, routeInOrder } from "./osrm.js?v=19";
-import { criarCapturaDocumento, prepararPipeline, recuperarFotoInterrompida } from "./ui/capture.js?v=19";
-import { lerConfigServidorLocal, salvarConfigServidorLocal, criarLocalServerProvider } from "./ocr/localServerProvider.js?v=19";
+import { supabase } from "./supabaseClient.js?v=20";
+import { geocodeAddress } from "./geocode.js?v=20";
+import { optimizeTrip, routeInOrder } from "./osrm.js?v=20";
+import { criarCapturaDocumento, prepararPipeline, recuperarFotoInterrompida } from "./ui/capture.js?v=20";
+import { lerConfigServidorLocal, salvarConfigServidorLocal, criarLocalServerProvider } from "./ocr/localServerProvider.js?v=20";
+import { criarAutocompleteEndereco } from "./ui/addressAutocomplete.js?v=20";
 
 // ---------------------------------------------------------------- state
 let currentUser = null;
@@ -240,8 +241,11 @@ function escapeHtml(s) {
 }
 
 // Paradas cadastradas rápido (direto na aba Rotas) podem não ter número de OS.
+// Cliente e número da OS agora são opcionais (só endereço é obrigatório) — sempre sobra pelo menos
+// o endereço como identificação da parada.
 function osLabel(os) {
-  return os.numero_os ? `OS ${escapeHtml(os.numero_os)} — ${escapeHtml(os.nome_cliente)}` : escapeHtml(os.nome_cliente);
+  const cliente = os.nome_cliente || os.endereco;
+  return os.numero_os ? `OS ${escapeHtml(os.numero_os)} — ${escapeHtml(cliente)}` : escapeHtml(cliente);
 }
 
 // "10:00:00" (formato time do Postgres) -> "10:00" pra mostrar. Campo opcional — null/vazio na
@@ -292,7 +296,12 @@ function openOsForm(id) {
   showView("os-form");
 }
 
-$("os-endereco").addEventListener("input", () => { osFormPin = null; });
+// Sugestão escolhida na lista de autocomplete já vem com lat/lng exata da própria escolha do
+// usuário — nada de chute ou fallback progressivo depois disso (ver geocode.js). Qualquer edição
+// manual do texto invalida a escolha (onSelect(null)) e volta a exigir geocodificação no envio.
+criarAutocompleteEndereco($("os-endereco"), (sugestao) => {
+  osFormPin = sugestao ? { lat: sugestao.lat, lng: sugestao.lng } : null;
+});
 
 $("btn-ajustar-mapa").addEventListener("click", async () => {
   const wrap = $("os-map-wrap");
@@ -471,8 +480,8 @@ $("form-os").addEventListener("submit", async (e) => {
   $("os-form-error").textContent = "";
 
   const payload = {
-    numero_os: $("os-numero").value.trim(),
-    nome_cliente: $("os-cliente").value.trim(),
+    numero_os: $("os-numero").value.trim() || null,
+    nome_cliente: $("os-cliente").value.trim() || null,
     endereco: $("os-endereco").value.trim(),
     contato: $("os-contato").value.trim(),
     banco: $("os-banco").value.trim(),
@@ -480,8 +489,8 @@ $("form-os").addEventListener("submit", async (e) => {
     prazo_entrega: $("os-prazo").value || null,
     observacoes: $("os-obs").value.trim(),
   };
-  if (!payload.numero_os || !payload.nome_cliente || !payload.endereco) {
-    $("os-form-error").textContent = "Preencha número da OS, cliente e endereço.";
+  if (!payload.endereco) {
+    $("os-form-error").textContent = "Preencha o endereço.";
     return;
   }
 
@@ -608,22 +617,35 @@ const origemPorFormulario = new WeakMap();
 
 function wireQuickAddForm(form, onAdded) {
   const statusEl = form.querySelector(".qp-status");
+
+  // Sugestão escolhida no autocomplete já traz lat/lng exata — só cai pro geocodeAddress
+  // (fallback progressivo, ver geocode.js) se o usuário digitou o endereço sem escolher nenhuma.
+  let pinSelecionado = null;
+  criarAutocompleteEndereco(form.elements.endereco, (sugestao) => {
+    pinSelecionado = sugestao ? { lat: sugestao.lat, lng: sugestao.lng } : null;
+  });
+
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const nome_cliente = form.elements.cliente.value.trim();
     const endereco = form.elements.endereco.value.trim();
-    if (!nome_cliente || !endereco) {
-      statusEl.textContent = "Preencha cliente e endereço.";
+    if (!endereco) {
+      statusEl.textContent = "Preencha o endereço.";
       return;
     }
 
     const btn = form.querySelector('button[type="submit"]');
     btn.disabled = true;
-    statusEl.textContent = "Localizando endereço...";
 
-    const geo = await geocodeAddress(endereco);
+    let geo;
+    if (pinSelecionado) {
+      geo = { ...pinSelecionado, aproximado: false };
+    } else {
+      statusEl.textContent = "Localizando endereço...";
+      geo = await geocodeAddress(endereco);
+    }
     const payload = {
-      nome_cliente,
+      nome_cliente: nome_cliente || null,
       endereco,
       servico: form.elements.servico.value.trim(),
       banco: form.elements.maquina.value.trim(),
@@ -641,6 +663,7 @@ function wireQuickAddForm(form, onAdded) {
     btn.disabled = false;
     if (error) { statusEl.textContent = "Erro ao adicionar: " + error.message; return; }
 
+    pinSelecionado = null;
     form.reset();
     origemPorFormulario.set(form, "manual");
     statusEl.textContent = !geo
@@ -1002,7 +1025,7 @@ function renderRotaDetail() {
     }
     detailStops.forEach((os, i) => {
       if (os.lat == null) return;
-      L.marker([os.lat, os.lng], { icon: numberedIcon(i + 1, "#3d8bfd") }).addTo(detailMap).bindPopup(`OS ${os.numero_os} — ${os.nome_cliente}`);
+      L.marker([os.lat, os.lng], { icon: numberedIcon(i + 1, "#3d8bfd") }).addTo(detailMap).bindPopup(osLabel(os));
     });
     if (detailRota.geometria) {
       const latlngs = detailRota.geometria.coordinates.map((c) => [c[1], c[0]]);

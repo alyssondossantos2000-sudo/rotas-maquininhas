@@ -127,3 +127,23 @@ export async function geocodeAddress(address) {
   if (algumaTentativaRespondeu) cache.set(key, final);
   return final;
 }
+
+// Sugestões ao vivo (autocomplete) enquanto o usuário digita — mesma restrição geográfica e mesma
+// fila com limite de 1 req/seg do geocodeAddress acima (Nominatim é o mesmo serviço, respeitando o
+// mesmo limite de uso). Diferente de geocodeAddress, aqui NÃO tem fallback progressivo nem aceita
+// resultado genérico: é o usuário que escolhe a opção certa na lista, então cada sugestão já vem
+// com sua própria lat/lng exata — sem chute nenhum depois.
+export async function buscarSugestoesEndereco(query) {
+  const q = query.trim();
+  if (q.length < 3) return [];
+  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=br&viewbox=${VIEWBOX}&bounded=1&q=${encodeURIComponent(q)}`;
+  try {
+    const res = await throttledFetch(url);
+    const data = await res.json();
+    if (!Array.isArray(data)) return [];
+    return data.map((d) => ({ label: d.display_name, lat: parseFloat(d.lat), lng: parseFloat(d.lon) }));
+  } catch (err) {
+    console.error("Erro ao buscar sugestões de endereço:", err);
+    return [];
+  }
+}

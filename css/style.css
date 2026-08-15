@@ -89,6 +89,21 @@ form{display:flex; flex-direction:column}
 .checkbox-row{flex-direction:row; align-items:center; gap:8px}
 .checkbox-row input[type=checkbox]{width:20px; height:20px; flex:none}
 
+/* ---- sugestões de endereço (autocomplete) ---- */
+.address-input-wrap{position:relative}
+.address-suggestions{
+  position:absolute; left:0; right:0; top:calc(100% + 4px); z-index:30;
+  background:var(--card-2); border:1px solid var(--border); border-radius:10px;
+  max-height:260px; overflow-y:auto;
+  box-shadow:0 8px 24px rgba(0,0,0,.35);
+}
+.address-suggestion-item{
+  padding:10px 14px; font-size:14px; color:var(--text); cursor:pointer;
+  border-bottom:1px solid var(--border);
+}
+.address-suggestion-item:last-child{border-bottom:none}
+.address-suggestion-item.active, .address-suggestion-item:hover{background:var(--card)}
+
 /* ---- ocr: servidor local do PC ---- */
 .ocr-local-config{
   background:var(--card); border:1px solid var(--border); border-radius:10px;

@@ -9,7 +9,7 @@
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/icon.svg">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="css/style.css?v=19">
+<link rel="stylesheet" href="css/style.css?v=20">
 </head>
 <body>
 
@@ -131,8 +131,8 @@
 
     <form id="form-os">
       <input type="hidden" id="os-id">
-      <label>Número da OS *<input type="text" id="os-numero" required></label>
-      <label>Nome do cliente *<input type="text" id="os-cliente" required></label>
+      <label>Número da OS (opcional)<input type="text" id="os-numero"></label>
+      <label>Nome do cliente (opcional)<input type="text" id="os-cliente"></label>
       <label>Endereço completo *<textarea id="os-endereco" rows="2" required placeholder="Rua, número, bairro, cidade - UF"></textarea></label>
       <button type="button" id="btn-ajustar-mapa" class="btn btn-secondary btn-block">🗺️ Ver/ajustar localização no mapa</button>
       <div id="os-map-wrap" class="hidden">
@@ -229,7 +229,7 @@
       </div>
 
       <form id="form-parada-rapida" class="form-parada-rapida">
-        <label>Nome do cliente *<input type="text" name="cliente" required></label>
+        <label>Nome do cliente (opcional)<input type="text" name="cliente"></label>
         <label>Endereço completo *<textarea name="endereco" rows="2" required placeholder="Rua, número, bairro"></textarea></label>
         <label>Tipo de serviço<input type="text" name="servico" placeholder="Instalação, troca, manutenção..."></label>
         <label>Máquina<input type="text" name="maquina" placeholder="Cielo, Stone, Sicredi..."></label>
@@ -310,7 +310,7 @@
       </div>
 
       <form id="form-parada-rapida-detalhe" class="form-parada-rapida">
-        <label>Nome do cliente *<input type="text" name="cliente" required></label>
+        <label>Nome do cliente (opcional)<input type="text" name="cliente"></label>
         <label>Endereço completo *<textarea name="endereco" rows="2" required placeholder="Rua, número, bairro"></textarea></label>
         <label>Tipo de serviço<input type="text" name="servico" placeholder="Instalação, troca, manutenção..."></label>
         <label>Máquina<input type="text" name="maquina" placeholder="Cielo, Stone, Sicredi..."></label>
@@ -357,6 +357,6 @@
      Pages) essa tag dá 404 inofensivo, o código só usa window.NativePlugins quando roda dentro
      do app nativo. Ver native/entry.js. -->
 <script src="vendor/native-plugins.js"></script>
-<script type="module" src="js/app.js?v=19"></script>
+<script type="module" src="js/app.js?v=20"></script>
 </body>
 </html>
