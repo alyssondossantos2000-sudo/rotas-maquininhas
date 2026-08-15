@@ -1,9 +1,15 @@
 // Sugestões de endereço ao vivo (tipo Google Maps) num campo de texto/textarea: espera o usuário
 // parar de digitar, busca no Nominatim, mostra uma lista clicável embaixo do campo. Ao escolher uma
 // opção, `onSelect({label, lat, lng})` recebe a coordenada EXATA daquela sugestão — quem chamou
-// não precisa geocodificar de novo no envio do formulário. Se o usuário editar o texto depois de
-// escolher, `onSelect(null)` avisa que a escolha não vale mais.
-import { buscarSugestoesEndereco } from "../geocode.js?v=20";
+// não precisa geocodificar de novo no envio do formulário.
+//
+// Depois de escolher, o usuário ainda pode COMPLETAR o texto (ex: escolhe "Rua Felipe de Brum,
+// Bairro X" e digita " 310" no final pra acrescentar o número da casa) sem perder a coordenada
+// escolhida — só nesse caso, a rua já achada é uma base boa o bastante (endereço de casa exato raramente
+// tá mapeado no OpenStreetMap em cidade pequena, mas a rua certa sim). A escolha só é invalidada
+// (`onSelect(null)`) se o texto deixar de começar com o rótulo escolhido — ou seja, se a parte que
+// foi escolhida for apagada/alterada, não só complementada.
+import { buscarSugestoesEndereco } from "../geocode.js?v=21";
 
 const DEBOUNCE_MS = 450;
 const MIN_CHARS = 3;
@@ -28,6 +34,7 @@ export function criarAutocompleteEndereco(input, onSelect) {
   let sequencia = 0;
   let sugestoesAtuais = [];
   let indiceAtivo = -1;
+  let labelEscolhido = null; // texto exato da última sugestão escolhida, pra saber se ainda é só complemento
 
   function esconder() {
     lista.classList.add("hidden");
@@ -44,6 +51,7 @@ export function criarAutocompleteEndereco(input, onSelect) {
     const s = sugestoesAtuais[idx];
     if (!s) return;
     input.value = s.label;
+    labelEscolhido = s.label;
     esconder();
     onSelect(s);
   }
@@ -62,14 +70,22 @@ export function criarAutocompleteEndereco(input, onSelect) {
   }
 
   input.addEventListener("input", () => {
-    onSelect(null); // qualquer edição manual invalida a escolha anterior
-    clearTimeout(timer);
     const valor = input.value.trim();
+    const aindaComplementando = labelEscolhido && valor.startsWith(labelEscolhido);
+    if (!aindaComplementando) {
+      labelEscolhido = null;
+      onSelect(null); // deixou de ser só complemento — a coordenada escolhida antes não vale mais
+    }
+    clearTimeout(timer);
     if (valor.length < MIN_CHARS) { esconder(); return; }
     const minhaVez = ++sequencia;
     timer = setTimeout(async () => {
       const sugestoes = await buscarSugestoesEndereco(valor);
       if (minhaVez !== sequencia) return; // resposta de uma busca já ultrapassada por digitação nova
+      // Complementando um endereço já escolhido (ex: acrescentando o número da casa): se a busca
+      // não achar nada mais específico, mantém a lista fechada em vez de forçar um dropdown vazio
+      // por cima da coordenada que já está boa.
+      if (aindaComplementando && !sugestoes.length) return;
       renderizar(sugestoes);
     }, DEBOUNCE_MS);
   });

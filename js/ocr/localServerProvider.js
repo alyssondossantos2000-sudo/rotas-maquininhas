@@ -3,7 +3,7 @@
 // de casa. Mantém o mesmo contrato dos outros providers (warmup/reconhecer), mas quem decide se
 // usa este provider ou cai pro ML Kit é o CompositeNativeProvider em provider.js — aqui só mora a
 // lógica de falar com o servidor.
-import { comLog } from "../core/logger.js?v=20";
+import { comLog } from "../core/logger.js?v=21";
 
 const CHAVE_CONFIG = "rm_ocr_local_server";
 // Timeout curto só pra checagem de disponibilidade (bate na porta antes de mandar a foto de

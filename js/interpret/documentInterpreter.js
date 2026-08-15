@@ -13,7 +13,7 @@ import {
   PADRAO_TELEFONE,
   encontrarPrimeiro,
   apenasDigitos,
-} from "../layout/fieldDetection.js?v=20";
+} from "../layout/fieldDetection.js?v=21";
 
 // Marcas/adquirentes comuns nos formulários de OS de maquininha — usadas pra descobrir o "banco"
 // quando o documento não tem um rótulo "Banco:" explícito (o mais comum na prática) e o usuário

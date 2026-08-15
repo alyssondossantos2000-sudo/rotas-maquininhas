@@ -128,6 +128,17 @@ export async function geocodeAddress(address) {
   return final;
 }
 
+// Partes do fim de display_name que são sempre as mesmas nesse app (tudo é Ponta Porã/MS) — cortar
+// fora deixa a sugestão curta o bastante pra virar a base de um endereço editável (ex: escolhe "Rua
+// Felipe de Brum, Bairro X" e completa digitando "310" no final), em vez do texto gigante cru do
+// Nominatim com CEP/estado/região/país repetidos em toda sugestão.
+const PARTES_REDUNDANTES = new Set(["ponta porã", "mato grosso do sul", "região centro-oeste", "brasil"]);
+function rotuloConciso(displayName) {
+  const partes = displayName.split(",").map((p) => p.trim());
+  const relevantes = partes.filter((p) => !PARTES_REDUNDANTES.has(p.toLowerCase()) && !/^\d{5}-?\d{3}$/.test(p));
+  return (relevantes.length ? relevantes : partes).slice(0, 2).join(", ");
+}
+
 // Sugestões ao vivo (autocomplete) enquanto o usuário digita — mesma restrição geográfica e mesma
 // fila com limite de 1 req/seg do geocodeAddress acima (Nominatim é o mesmo serviço, respeitando o
 // mesmo limite de uso). Diferente de geocodeAddress, aqui NÃO tem fallback progressivo nem aceita
@@ -141,7 +152,7 @@ export async function buscarSugestoesEndereco(query) {
     const res = await throttledFetch(url);
     const data = await res.json();
     if (!Array.isArray(data)) return [];
-    return data.map((d) => ({ label: d.display_name, lat: parseFloat(d.lat), lng: parseFloat(d.lon) }));
+    return data.map((d) => ({ label: rotuloConciso(d.display_name), lat: parseFloat(d.lat), lng: parseFloat(d.lon) }));
   } catch (err) {
     console.error("Erro ao buscar sugestões de endereço:", err);
     return [];

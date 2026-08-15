@@ -1,3 +1,3 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=20";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=21";
 
 export const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
