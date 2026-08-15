@@ -13,7 +13,11 @@
 // rua já é uma base boa o bastante (endereço de casa exato raramente tá mapeado em cidade pequena,
 // mas a rua certa sim). A escolha só é invalidada (`onSelect(null)`) se o texto deixar de começar
 // com o rótulo escolhido — ou seja, se a parte escolhida for apagada/alterada, não só complementada.
-import { buscarSugestoesEndereco } from "../geocode.js?v=23";
+import { buscarSugestoesEndereco } from "../geocode.js?v=24";
+
+// `buscarFn` é injetável (ao invés de sempre importar direto) pra esse mesmo componente também
+// servir o campo de "cidade base" da tela Perfil, que usa uma busca sem restrição de área
+// (buscarSugestoesCidade) em vez da busca de endereço de parada (restrita à região configurada).
 
 // O mais curto que dá sem virar barulho: o gargalo real de velocidade é o limite de taxa do
 // LocationIQ (ver filaSugestoes em geocode.js), não esse debounce — baixar mais isso só manda mais
@@ -25,7 +29,7 @@ function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-export function criarAutocompleteEndereco(input, onSelect) {
+export function criarAutocompleteEndereco(input, onSelect, buscarFn = buscarSugestoesEndereco) {
   if (!input) return;
 
   const wrap = document.createElement("div");
@@ -96,7 +100,7 @@ export function criarAutocompleteEndereco(input, onSelect) {
     if (!aindaComplementando) mostrarCarregando(); // feedback imediato — a busca em si ainda leva um instante (ver geocode.js)
     const minhaVez = ++sequencia;
     timer = setTimeout(async () => {
-      const sugestoes = await buscarSugestoesEndereco(valor);
+      const sugestoes = await buscarFn(valor);
       if (minhaVez !== sequencia) return; // resposta de uma busca já ultrapassada por digitação nova
       // Complementando um endereço já escolhido (ex: acrescentando o número da casa): se a busca
       // não achar nada mais específico, mantém a lista fechada em vez de forçar um dropdown vazio

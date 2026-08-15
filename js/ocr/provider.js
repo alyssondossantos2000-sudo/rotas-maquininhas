@@ -2,9 +2,9 @@
 // baixo. Trocar por um serviço pago no futuro (Google Vision, Azure, etc.) significa escrever uma
 // nova classe com os mesmos dois métodos e trocar a instância em getOcrProvider(), sem tocar em
 // layout/, interpret/ ou ui/.
-import { comLog } from "../core/logger.js?v=23";
-import { criarMlKitProvider } from "./mlkitProvider.js?v=23";
-import { criarLocalServerProvider, lerConfigServidorLocal } from "./localServerProvider.js?v=23";
+import { comLog } from "../core/logger.js?v=24";
+import { criarMlKitProvider } from "./mlkitProvider.js?v=24";
+import { criarLocalServerProvider, lerConfigServidorLocal } from "./localServerProvider.js?v=24";
 
 function traduzirStatus(m) {
   if (m.status === "recognizing text") return `Lendo a foto... ${Math.round(m.progress * 100)}%`;

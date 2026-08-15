@@ -9,7 +9,7 @@
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/icon.svg">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="css/style.css?v=23">
+<link rel="stylesheet" href="css/style.css?v=24">
 </head>
 <body>
 
@@ -327,12 +327,22 @@
     <button id="btn-rota-voltar" class="btn btn-ghost btn-block">Voltar para rotas</button>
   </section>
 
+  <!-- PERFIL: região/raio de busca de endereço -->
+  <section id="view-perfil" class="view hidden">
+    <p class="muted">Onde você está atendendo agora — a busca de endereço (autocomplete) passa a priorizar essa região. Mude aqui se for atender fora de Ponta Porã (ex: Sanga Puitã, Itamarati, ou outra cidade).</p>
+    <label>Cidade/região base<input type="text" id="perfil-cidade" placeholder="Ponta Porã, MS"></label>
+    <label>Raio de busca (km)<input type="number" id="perfil-raio" min="1" max="1000" value="60"></label>
+    <button type="button" id="btn-perfil-salvar" class="btn btn-primary btn-block">Salvar</button>
+    <p id="perfil-status" class="muted"></p>
+  </section>
+
 </div>
 
 <nav id="bottom-nav" class="hidden">
   <button data-view="os-list" class="nav-btn active">📋<span>OS</span></button>
   <button data-view="os-form" class="nav-btn">➕<span>Nova</span></button>
   <button data-view="rotas-list" class="nav-btn">🗺️<span>Rotas</span></button>
+  <button data-view="perfil" class="nav-btn">👤<span>Perfil</span></button>
 </nav>
 
 <div id="floating-widget" class="hidden">
@@ -357,6 +367,6 @@
      Pages) essa tag dá 404 inofensivo, o código só usa window.NativePlugins quando roda dentro
      do app nativo. Ver native/entry.js. -->
 <script src="vendor/native-plugins.js"></script>
-<script type="module" src="js/app.js?v=23"></script>
+<script type="module" src="js/app.js?v=24"></script>
 </body>
 </html>

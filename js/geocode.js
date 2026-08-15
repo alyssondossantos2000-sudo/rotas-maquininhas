@@ -2,7 +2,7 @@
 // limite de taxa bem mais folgado no plano grátis (2 req/seg vs 1 req/seg, sem risco de bloqueio
 // por uso "pesado demais" — problema real que já aconteceu testando esse app). Resposta no mesmo
 // formato do Nominatim (é literalmente Nominatim por baixo), só muda a URL e a chave.
-import { LOCATIONIQ_KEY } from "./config.js?v=23";
+import { LOCATIONIQ_KEY } from "./config.js?v=24";
 
 const cache = new Map();
 const MIN_INTERVAL_MS = 550; // plano grátis do LocationIQ: 2 req/seg — 550ms dá uma margem pequena de segurança
@@ -28,14 +28,46 @@ function criarFila() {
 const filaEndereco = criarFila();
 const filaSugestoes = criarFila();
 
-// App limitado à região de Ponta Porã/MS (inclui os distritos de Itamarati e Sanga Puitã,
-// que fazem parte do mesmo município) — evita que um endereço parecido de outra cidade do
-// Brasil seja encontrado por engano. Caixa geográfica do município de Ponta Porã inteiro.
+// Região onde a busca de endereço é restrita (evita achar rua de nome parecido em outra cidade do
+// Brasil por engano). Por padrão é o município de Ponta Porã inteiro (inclui os distritos de
+// Itamarati e Sanga Puitã) — mas o usuário pode configurar um centro + raio próprio na tela
+// "Perfil", útil se for atender fora da região de sempre. Ver lerPerfilBusca/salvarPerfilBusca.
 const PONTA_PORA_BBOX = { minLat: -22.7642905, maxLat: -21.6339890, minLon: -56.1123178, maxLon: -54.9764267 };
-const VIEWBOX = `${PONTA_PORA_BBOX.minLon},${PONTA_PORA_BBOX.maxLat},${PONTA_PORA_BBOX.maxLon},${PONTA_PORA_BBOX.minLat}`;
+const VIEWBOX_PADRAO = `${PONTA_PORA_BBOX.minLon},${PONTA_PORA_BBOX.maxLat},${PONTA_PORA_BBOX.maxLon},${PONTA_PORA_BBOX.minLat}`;
+
+const CHAVE_PERFIL = "rm_perfil_busca";
+
+// { cidade, lat, lng, raioKm } com o centro/raio escolhidos pelo usuário, ou null se nunca
+// configurou (nesse caso usa o município de Ponta Porã inteiro, comportamento de sempre).
+export function lerPerfilBusca() {
+  try {
+    const salvo = JSON.parse(localStorage.getItem(CHAVE_PERFIL) || "null");
+    if (!salvo || salvo.lat == null || salvo.lng == null || !salvo.raioKm) return null;
+    return salvo;
+  } catch {
+    return null;
+  }
+}
+
+export function salvarPerfilBusca(perfil) {
+  localStorage.setItem(CHAVE_PERFIL, JSON.stringify(perfil));
+}
+
+// 1° de latitude ≈ 111km sempre; 1° de longitude encolhe conforme se afasta do equador
+// (≈111km × cos(latitude)) — sem isso o raio ficaria "esticado" de leste a oeste.
+function viewboxDoRaio(lat, lng, raioKm) {
+  const dLat = raioKm / 111;
+  const dLon = raioKm / (111 * Math.cos((lat * Math.PI) / 180));
+  return `${lng - dLon},${lat + dLat},${lng + dLon},${lat - dLat}`;
+}
+
+function viewboxAtual() {
+  const perfil = lerPerfilBusca();
+  return perfil ? viewboxDoRaio(perfil.lat, perfil.lng, perfil.raioKm) : VIEWBOX_PADRAO;
+}
 
 function baseUrl() {
-  return `https://us1.locationiq.com/v1/search?key=${LOCATIONIQ_KEY}&format=json&countrycodes=br&viewbox=${VIEWBOX}&bounded=1`;
+  return `https://us1.locationiq.com/v1/search?key=${LOCATIONIQ_KEY}&format=json&countrycodes=br&viewbox=${viewboxAtual()}&bounded=1`;
 }
 
 async function buscarNominatim(query) {
@@ -183,6 +215,30 @@ export async function buscarSugestoesEndereco(query) {
     });
   } catch (err) {
     console.error("Erro ao buscar sugestões de endereço:", err);
+    return [];
+  }
+}
+
+// Busca de cidade/região pra tela "Perfil" (escolher o centro do raio de busca) — SEM viewbox/
+// bounded, porque é justamente aqui que o usuário pode escolher um lugar fora da área restrita de
+// sempre (ex: mudou pra atender em outra cidade). Reaproveita a fila de sugestões (ação pontual,
+// não compete de verdade com a busca de endereço de parada). Mantém rua/número junto do resto do
+// nome (sem o corte de PARTES_REDUNDANTES, que é específico de Ponta Porã) pra dar contexto de
+// cidade/estado suficiente pra diferenciar lugares de nome parecido em partes diferentes do Brasil.
+export async function buscarSugestoesCidade(query) {
+  const q = query.trim();
+  if (q.length < 3) return [];
+  const url = `https://us1.locationiq.com/v1/search?key=${LOCATIONIQ_KEY}&format=json&countrycodes=br&limit=5&q=${encodeURIComponent(q)}`;
+  try {
+    const res = await filaSugestoes(url);
+    const data = await res.json();
+    if (!Array.isArray(data)) return [];
+    return data.map((d) => {
+      const partes = d.display_name.split(",").map((p) => p.trim());
+      return { label: partes[0], contexto: partes.slice(1, 3).join(", "), lat: parseFloat(d.lat), lng: parseFloat(d.lon) };
+    });
+  } catch (err) {
+    console.error("Erro ao buscar sugestões de cidade:", err);
     return [];
   }
 }

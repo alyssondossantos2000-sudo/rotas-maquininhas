@@ -1,9 +1,9 @@
-import { supabase } from "./supabaseClient.js?v=23";
-import { geocodeAddress } from "./geocode.js?v=23";
-import { optimizeTrip, routeInOrder } from "./osrm.js?v=23";
-import { criarCapturaDocumento, prepararPipeline, recuperarFotoInterrompida } from "./ui/capture.js?v=23";
-import { lerConfigServidorLocal, salvarConfigServidorLocal, criarLocalServerProvider } from "./ocr/localServerProvider.js?v=23";
-import { criarAutocompleteEndereco } from "./ui/addressAutocomplete.js?v=23";
+import { supabase } from "./supabaseClient.js?v=24";
+import { geocodeAddress, lerPerfilBusca, salvarPerfilBusca, buscarSugestoesCidade } from "./geocode.js?v=24";
+import { optimizeTrip, routeInOrder } from "./osrm.js?v=24";
+import { criarCapturaDocumento, prepararPipeline, recuperarFotoInterrompida } from "./ui/capture.js?v=24";
+import { lerConfigServidorLocal, salvarConfigServidorLocal, criarLocalServerProvider } from "./ocr/localServerProvider.js?v=24";
+import { criarAutocompleteEndereco } from "./ui/addressAutocomplete.js?v=24";
 
 // ---------------------------------------------------------------- state
 let currentUser = null;
@@ -56,6 +56,7 @@ function showView(name) {
     "rotas-list": "Rotas",
     "rota-build": "Nova rota",
     "rota-detail": "Rota",
+    "perfil": "Perfil",
   };
   $("header-title").textContent = titles[name] || "Rotas Maquininhas";
 
@@ -179,8 +180,56 @@ document.querySelectorAll(".nav-btn").forEach((btn) => {
     const view = btn.dataset.view;
     if (view === "os-form") openOsForm(null);
     else if (view === "rotas-list") { showView("rotas-list"); loadRotas(); }
+    else if (view === "perfil") abrirPerfil();
     else { showView("os-list"); loadOsList(); }
   });
+});
+
+// ---------------------------------------------------------------- perfil (região/raio de busca)
+const CIDADE_BASE_PADRAO = "Ponta Porã, MS";
+const RAIO_PADRAO_KM = 60; // cobre o município inteiro (Ponta Porã + Itamarati + Sanga Puitã), igual ao limite fixo de antes
+
+let cidadeSelecionada = null; // {label, lat, lng} escolhido no autocomplete — null se só digitou sem escolher
+
+criarAutocompleteEndereco($("perfil-cidade"), (s) => { cidadeSelecionada = s; }, buscarSugestoesCidade);
+
+function abrirPerfil() {
+  const perfil = lerPerfilBusca();
+  $("perfil-cidade").value = perfil ? perfil.cidade : CIDADE_BASE_PADRAO;
+  $("perfil-raio").value = perfil ? perfil.raioKm : RAIO_PADRAO_KM;
+  $("perfil-status").textContent = perfil
+    ? ""
+    : `Ainda sem configuração própria — usando a região padrão (${CIDADE_BASE_PADRAO}, ${RAIO_PADRAO_KM}km).`;
+  cidadeSelecionada = null;
+  showView("perfil");
+}
+
+$("btn-perfil-salvar").addEventListener("click", async () => {
+  const cidadeTexto = $("perfil-cidade").value.trim();
+  const raioKm = Number($("perfil-raio").value);
+  if (!cidadeTexto) { $("perfil-status").textContent = "Preencha a cidade/região."; return; }
+  if (!raioKm || raioKm <= 0) { $("perfil-status").textContent = "Preencha um raio válido."; return; }
+
+  const btn = $("btn-perfil-salvar");
+  btn.disabled = true;
+
+  // Se o usuário escolheu uma sugestão da lista já tem lat/lng exata — só faz uma busca extra se
+  // ele digitou o nome da cidade e apertou Salvar direto, sem escolher nada na lista.
+  let alvo = cidadeSelecionada;
+  if (!alvo || alvo.label !== cidadeTexto) {
+    $("perfil-status").textContent = "Localizando cidade...";
+    const [primeira] = await buscarSugestoesCidade(cidadeTexto);
+    alvo = primeira || null;
+  }
+
+  btn.disabled = false;
+  if (!alvo) {
+    $("perfil-status").textContent = "Não localizei essa cidade — tente escolher uma opção da lista de sugestões.";
+    return;
+  }
+
+  salvarPerfilBusca({ cidade: cidadeTexto, lat: alvo.lat, lng: alvo.lng, raioKm });
+  $("perfil-status").textContent = `Região salva: ${cidadeTexto}, raio de ${raioKm}km.`;
 });
 
 // ---------------------------------------------------------------- OS list
