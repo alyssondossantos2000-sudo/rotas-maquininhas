@@ -13,7 +13,7 @@
 // rua já é uma base boa o bastante (endereço de casa exato raramente tá mapeado em cidade pequena,
 // mas a rua certa sim). A escolha só é invalidada (`onSelect(null)`) se o texto deixar de começar
 // com o rótulo escolhido — ou seja, se a parte escolhida for apagada/alterada, não só complementada.
-import { buscarSugestoesEndereco } from "../geocode.js?v=24";
+import { buscarSugestoesEndereco } from "../geocode.js?v=27";
 
 // `buscarFn` é injetável (ao invés de sempre importar direto) pra esse mesmo componente também
 // servir o campo de "cidade base" da tela Perfil, que usa uma busca sem restrição de área
@@ -76,10 +76,17 @@ export function criarAutocompleteEndereco(input, onSelect, buscarFn = buscarSuge
     sugestoesAtuais = sugestoes;
     indiceAtivo = -1;
     if (!sugestoes.length) { esconder(); return; }
-    lista.innerHTML = sugestoes.map((s, i) => `
+    lista.innerHTML = sugestoes.map((s, i) => {
+      // Resultados já vêm ordenados por distância (mais perto primeiro, ver geocode.js) — mostrar
+      // a distância só quando notavelmente longe (>15km) ajuda a entender que aquilo é "arredor",
+      // não a cidade base, sem poluir a lista quando tudo já é bem pertinho.
+      const longe = s.distanciaKm != null && s.distanciaKm > 15;
+      const extra = [s.contexto, longe ? `${Math.round(s.distanciaKm)}km` : null].filter(Boolean).join(" — ");
+      return `
       <div class="address-suggestion-item" data-idx="${i}">
-        ${escapeHtml(s.label)}${s.contexto ? `<span class="address-suggestion-contexto"> — ${escapeHtml(s.contexto)}</span>` : ""}
-      </div>`).join("");
+        ${escapeHtml(s.label)}${extra ? `<span class="address-suggestion-contexto"> — ${escapeHtml(extra)}</span>` : ""}
+      </div>`;
+    }).join("");
     lista.classList.remove("hidden");
     // pointerdown (não click) + preventDefault: mantém o foco no campo, então nem dispara o blur
     // que ia esconder a lista antes do clique "colar" — mesmo truque já usado no fluxo de OCR.

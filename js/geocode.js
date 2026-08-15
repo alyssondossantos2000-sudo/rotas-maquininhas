@@ -2,7 +2,7 @@
 // limite de taxa bem mais folgado no plano grátis (2 req/seg vs 1 req/seg, sem risco de bloqueio
 // por uso "pesado demais" — problema real que já aconteceu testando esse app). Resposta no mesmo
 // formato do Nominatim (é literalmente Nominatim por baixo), só muda a URL e a chave.
-import { LOCATIONIQ_KEY } from "./config.js?v=24";
+import { LOCATIONIQ_KEY } from "./config.js?v=27";
 
 const cache = new Map();
 const MIN_INTERVAL_MS = 550; // plano grátis do LocationIQ: 2 req/seg — 550ms dá uma margem pequena de segurança
@@ -28,21 +28,18 @@ function criarFila() {
 const filaEndereco = criarFila();
 const filaSugestoes = criarFila();
 
-// Região onde a busca de endereço é restrita (evita achar rua de nome parecido em outra cidade do
-// Brasil por engano). Por padrão é o município de Ponta Porã inteiro (inclui os distritos de
-// Itamarati e Sanga Puitã) — mas o usuário pode configurar um centro + raio próprio na tela
-// "Perfil", útil se for atender fora da região de sempre. Ver lerPerfilBusca/salvarPerfilBusca.
-const PONTA_PORA_BBOX = { minLat: -22.7642905, maxLat: -21.6339890, minLon: -56.1123178, maxLon: -54.9764267 };
-const VIEWBOX_PADRAO = `${PONTA_PORA_BBOX.minLon},${PONTA_PORA_BBOX.maxLat},${PONTA_PORA_BBOX.maxLon},${PONTA_PORA_BBOX.minLat}`;
+// Centro de Ponta Porã — usado como centro padrão de busca/distância enquanto o usuário não
+// configurar nada na tela "Perfil".
+const PONTA_PORA_CENTRO = { lat: -22.5286917, lng: -55.723426 };
 
 const CHAVE_PERFIL = "rm_perfil_busca";
 
-// { cidade, lat, lng, raioKm } com o centro/raio escolhidos pelo usuário, ou null se nunca
-// configurou (nesse caso usa o município de Ponta Porã inteiro, comportamento de sempre).
+// { cidade, lat, lng, raioMinKm, raioMaxKm } com o centro e os dois raios escolhidos pelo usuário,
+// ou null se nunca configurou (nesse caso usa o centro de Ponta Porã com os raios padrão abaixo).
 export function lerPerfilBusca() {
   try {
     const salvo = JSON.parse(localStorage.getItem(CHAVE_PERFIL) || "null");
-    if (!salvo || salvo.lat == null || salvo.lng == null || !salvo.raioKm) return null;
+    if (!salvo || salvo.lat == null || salvo.lng == null || !salvo.raioMinKm || !salvo.raioMaxKm) return null;
     return salvo;
   } catch {
     return null;
@@ -53,39 +50,90 @@ export function salvarPerfilBusca(perfil) {
   localStorage.setItem(CHAVE_PERFIL, JSON.stringify(perfil));
 }
 
+function centroAtual() {
+  const perfil = lerPerfilBusca();
+  return perfil ? { lat: perfil.lat, lng: perfil.lng } : PONTA_PORA_CENTRO;
+}
+
+// Raio mínimo (busca local, tentada PRIMEIRO) e máximo (arredores, só tentado se o mínimo não
+// achar nada) padrão — cobre Ponta Porã + Itamarati + Sanga Puitã como raio mínimo. O usuário pode
+// configurar os dois na tela "Perfil" (ex: mínimo 70km / máximo 300km, pra cobrir bem mais além).
+export const RAIO_MIN_PADRAO_KM = 70;
+export const RAIO_MAX_PADRAO_KM = 70;
+
+// BUG REAL relatado com dados de teste: só reordenar por distância não bastava quando o raio
+// configurado era grande — o LocationIQ ordena por "importância" geral e já corta o limite de
+// resultados ANTES de mandar a resposta, então uma rua pequena de Ponta Porã podia nem aparecer
+// entre os primeiros resultados se existissem ruas de nome parecido "mais importantes" (de uma
+// cidade maior) dentro do mesmo raio de 250km. Corrigido fazendo duas buscas em SEQUÊNCIA: local
+// (raio MÍNIMO, onde a rua de Ponta Porã não compete com nada de fora) primeiro; só expande pro
+// raio MÁXIMO se a busca local não achar nada — em vez de uma busca só, grande, disputada.
+
 // 1° de latitude ≈ 111km sempre; 1° de longitude encolhe conforme se afasta do equador
 // (≈111km × cos(latitude)) — sem isso o raio ficaria "esticado" de leste a oeste.
-function viewboxDoRaio(lat, lng, raioKm) {
+function viewboxDoRaio(centro, raioKm) {
   const dLat = raioKm / 111;
-  const dLon = raioKm / (111 * Math.cos((lat * Math.PI) / 180));
-  return `${lng - dLon},${lat + dLat},${lng + dLon},${lat - dLat}`;
+  const dLon = raioKm / (111 * Math.cos((centro.lat * Math.PI) / 180));
+  return `${centro.lng - dLon},${centro.lat + dLat},${centro.lng + dLon},${centro.lat - dLat}`;
 }
 
-function viewboxAtual() {
+// Distância em linha reta (fórmula de Haversine) — não precisa de precisão de rota, só de ordenar
+// "mais perto primeiro". Raio da Terra em km.
+function distanciaKm(a, b) {
+  const R = 6371;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const rLat1 = (a.lat * Math.PI) / 180;
+  const rLat2 = (b.lat * Math.PI) / 180;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rLat1) * Math.cos(rLat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+function urlBusca(query, centro, raioKm, limite) {
+  const viewbox = viewboxDoRaio(centro, raioKm);
+  return `https://us1.locationiq.com/v1/search?key=${LOCATIONIQ_KEY}&format=json&countrycodes=br&viewbox=${viewbox}&bounded=1&limit=${limite}&q=${encodeURIComponent(query)}`;
+}
+
+function raioMinAtual() {
   const perfil = lerPerfilBusca();
-  return perfil ? viewboxDoRaio(perfil.lat, perfil.lng, perfil.raioKm) : VIEWBOX_PADRAO;
+  return perfil ? perfil.raioMinKm : RAIO_MIN_PADRAO_KM;
 }
 
-function baseUrl() {
-  return `https://us1.locationiq.com/v1/search?key=${LOCATIONIQ_KEY}&format=json&countrycodes=br&viewbox=${viewboxAtual()}&bounded=1`;
+// Raio máximo (arredores) só entra como 2ª etapa se for realmente maior que o mínimo — senão seria
+// repetir a mesma busca de novo à toa.
+function raioMaxAmplo() {
+  const perfil = lerPerfilBusca();
+  const min = raioMinAtual();
+  const max = perfil ? perfil.raioMaxKm : RAIO_MAX_PADRAO_KM;
+  return max > min ? max : null;
 }
 
 async function buscarNominatim(query) {
-  const url = `${baseUrl()}&limit=1&q=${encodeURIComponent(query)}`;
-  const res = await filaEndereco(url);
-  const data = await res.json();
-  if (!data || !data.length) return null;
+  const centro = centroAtual();
+
+  const tentar = async (raioKm) => {
+    const url = urlBusca(query, centro, raioKm, 1);
+    const res = await filaEndereco(url);
+    const data = await res.json();
+    return data && data.length ? data[0] : null;
+  };
+
+  let d = await tentar(raioMinAtual());
+  const raioAmplo = raioMaxAmplo();
+  if (!d && raioAmplo) d = await tentar(raioAmplo);
+  if (!d) return null;
+
   return {
-    lat: parseFloat(data[0].lat),
-    lng: parseFloat(data[0].lon),
-    display: data[0].display_name,
+    lat: parseFloat(d.lat),
+    lng: parseFloat(d.lon),
+    display: d.display_name,
     // addresstype/class dizem QUE TIPO de coisa foi encontrada (rua, casa, bairro...) vs só o
     // contorno de uma cidade/estado inteiro — usado logo abaixo pra saber se vale a pena continuar
     // tentando algo mais específico antes de aceitar esse resultado. O Nominatim público manda
     // `addresstype`; testando contra o LocationIQ esse campo não vem (só `type`, que carrega a
     // mesma informação) — checa os dois pra funcionar com qualquer um dos dois.
-    addresstype: data[0].addresstype || data[0].type,
-    class: data[0].class,
+    addresstype: d.addresstype || d.type,
+    class: d.class,
   };
 }
 
@@ -196,23 +244,44 @@ function ruaEContexto(displayName) {
   return { rua: base[0] || displayName, contexto: base[1] || "" };
 }
 
+function mapearResultados(data, centro) {
+  return data.map((d) => {
+    const { rua, contexto } = ruaEContexto(d.display_name);
+    const lat = parseFloat(d.lat), lng = parseFloat(d.lon);
+    return { label: rua, contexto, lat, lng, distanciaKm: distanciaKm(centro, { lat, lng }) };
+  });
+}
+
+const LIMITE_BRUTO = 20;
+const LIMITE_EXIBIDO = 5;
+
 // Sugestões ao vivo (autocomplete) enquanto o usuário digita. Fila própria (ver filaSugestoes
 // acima) — não fica presa atrás de uma busca de endereço não relacionada rodando em outro lugar do
 // app. Diferente de geocodeAddress, aqui NÃO tem fallback progressivo nem aceita resultado
 // genérico: é o usuário que escolhe a opção certa na lista, então cada sugestão já vem com sua
 // própria lat/lng exata — sem chute nenhum depois.
+//
+// Duas etapas (raio mínimo primeiro, depois o raio máximo — ver raioMinAtual/raioMaxAmplo acima):
+// dentro de cada etapa os resultados vêm ordenados por distância até o centro, mais perto primeiro.
 export async function buscarSugestoesEndereco(query) {
   const q = query.trim();
   if (q.length < 3) return [];
-  const url = `${baseUrl()}&limit=5&q=${encodeURIComponent(q)}`;
-  try {
+  const centro = centroAtual();
+
+  const buscar = async (raioKm) => {
+    const url = urlBusca(q, centro, raioKm, LIMITE_BRUTO);
     const res = await filaSugestoes(url);
     const data = await res.json();
-    if (!Array.isArray(data)) return [];
-    return data.map((d) => {
-      const { rua, contexto } = ruaEContexto(d.display_name);
-      return { label: rua, contexto, lat: parseFloat(d.lat), lng: parseFloat(d.lon) };
-    });
+    return Array.isArray(data) ? data : [];
+  };
+
+  try {
+    let data = await buscar(raioMinAtual());
+    const raioAmplo = raioMaxAmplo();
+    if (!data.length && raioAmplo) data = await buscar(raioAmplo);
+    return mapearResultados(data, centro)
+      .sort((a, b) => a.distanciaKm - b.distanciaKm)
+      .slice(0, LIMITE_EXIBIDO);
   } catch (err) {
     console.error("Erro ao buscar sugestões de endereço:", err);
     return [];

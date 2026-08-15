@@ -9,7 +9,7 @@
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/icon.svg">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="css/style.css?v=24">
+<link rel="stylesheet" href="css/style.css?v=27">
 </head>
 <body>
 
@@ -329,9 +329,10 @@
 
   <!-- PERFIL: região/raio de busca de endereço -->
   <section id="view-perfil" class="view hidden">
-    <p class="muted">Onde você está atendendo agora — a busca de endereço (autocomplete) passa a priorizar essa região. Mude aqui se for atender fora de Ponta Porã (ex: Sanga Puitã, Itamarati, ou outra cidade).</p>
+    <p class="muted">Onde você está atendendo agora. A busca de endereço tenta primeiro dentro do raio mínimo (rápido, sem disputar com rua de nome parecido em outra cidade) — só se não achar nada aí, expande até o raio máximo. Mude a cidade base se for atender fora de Ponta Porã (ex: Sanga Puitã, Itamarati, ou outra cidade).</p>
     <label>Cidade/região base<input type="text" id="perfil-cidade" placeholder="Ponta Porã, MS"></label>
-    <label>Raio de busca (km)<input type="number" id="perfil-raio" min="1" max="1000" value="60"></label>
+    <label>Raio mínimo — busca local (km)<input type="number" id="perfil-raio-min" min="1" max="1000" value="70"></label>
+    <label>Raio máximo — arredores (km)<input type="number" id="perfil-raio-max" min="1" max="1000" value="70"></label>
     <button type="button" id="btn-perfil-salvar" class="btn btn-primary btn-block">Salvar</button>
     <p id="perfil-status" class="muted"></p>
   </section>
@@ -367,6 +368,6 @@
      Pages) essa tag dá 404 inofensivo, o código só usa window.NativePlugins quando roda dentro
      do app nativo. Ver native/entry.js. -->
 <script src="vendor/native-plugins.js"></script>
-<script type="module" src="js/app.js?v=24"></script>
+<script type="module" src="js/app.js?v=27"></script>
 </body>
 </html>

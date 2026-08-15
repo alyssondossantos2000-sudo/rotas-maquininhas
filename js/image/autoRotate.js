@@ -1,7 +1,7 @@
 // Detecção automática de rotação (0/90/180/270) via OSD (Orientation and Script Detection) do
 // Tesseract — fotos tiradas "de lado" ou "de cabeça pra baixo" deixam qualquer OCR praticamente
 // cego. Roda ANTES do OCR de verdade, numa cópia pequena da foto (rápido).
-import { comLog } from "../core/logger.js?v=24";
+import { comLog } from "../core/logger.js?v=27";
 
 // Desenha o bitmap num canvas girado pelos graus indicados (sentido horário), com o maior lado
 // limitado a maxDim. Usado tanto pra pré-visualização rápida quanto pra gerar a imagem final.

@@ -1,9 +1,9 @@
-import { supabase } from "./supabaseClient.js?v=24";
-import { geocodeAddress, lerPerfilBusca, salvarPerfilBusca, buscarSugestoesCidade } from "./geocode.js?v=24";
-import { optimizeTrip, routeInOrder } from "./osrm.js?v=24";
-import { criarCapturaDocumento, prepararPipeline, recuperarFotoInterrompida } from "./ui/capture.js?v=24";
-import { lerConfigServidorLocal, salvarConfigServidorLocal, criarLocalServerProvider } from "./ocr/localServerProvider.js?v=24";
-import { criarAutocompleteEndereco } from "./ui/addressAutocomplete.js?v=24";
+import { supabase } from "./supabaseClient.js?v=27";
+import { geocodeAddress, lerPerfilBusca, salvarPerfilBusca, buscarSugestoesCidade, RAIO_MIN_PADRAO_KM, RAIO_MAX_PADRAO_KM } from "./geocode.js?v=27";
+import { optimizeTrip, routeInOrder } from "./osrm.js?v=27";
+import { criarCapturaDocumento, prepararPipeline, recuperarFotoInterrompida } from "./ui/capture.js?v=27";
+import { lerConfigServidorLocal, salvarConfigServidorLocal, criarLocalServerProvider } from "./ocr/localServerProvider.js?v=27";
+import { criarAutocompleteEndereco } from "./ui/addressAutocomplete.js?v=27";
 
 // ---------------------------------------------------------------- state
 let currentUser = null;
@@ -187,7 +187,6 @@ document.querySelectorAll(".nav-btn").forEach((btn) => {
 
 // ---------------------------------------------------------------- perfil (região/raio de busca)
 const CIDADE_BASE_PADRAO = "Ponta Porã, MS";
-const RAIO_PADRAO_KM = 60; // cobre o município inteiro (Ponta Porã + Itamarati + Sanga Puitã), igual ao limite fixo de antes
 
 let cidadeSelecionada = null; // {label, lat, lng} escolhido no autocomplete — null se só digitou sem escolher
 
@@ -196,19 +195,22 @@ criarAutocompleteEndereco($("perfil-cidade"), (s) => { cidadeSelecionada = s; },
 function abrirPerfil() {
   const perfil = lerPerfilBusca();
   $("perfil-cidade").value = perfil ? perfil.cidade : CIDADE_BASE_PADRAO;
-  $("perfil-raio").value = perfil ? perfil.raioKm : RAIO_PADRAO_KM;
+  $("perfil-raio-min").value = perfil ? perfil.raioMinKm : RAIO_MIN_PADRAO_KM;
+  $("perfil-raio-max").value = perfil ? perfil.raioMaxKm : RAIO_MAX_PADRAO_KM;
   $("perfil-status").textContent = perfil
     ? ""
-    : `Ainda sem configuração própria — usando a região padrão (${CIDADE_BASE_PADRAO}, ${RAIO_PADRAO_KM}km).`;
+    : `Ainda sem configuração própria — usando a região padrão (${CIDADE_BASE_PADRAO}, raio ${RAIO_MIN_PADRAO_KM}-${RAIO_MAX_PADRAO_KM}km).`;
   cidadeSelecionada = null;
   showView("perfil");
 }
 
 $("btn-perfil-salvar").addEventListener("click", async () => {
   const cidadeTexto = $("perfil-cidade").value.trim();
-  const raioKm = Number($("perfil-raio").value);
+  const raioMinKm = Number($("perfil-raio-min").value);
+  const raioMaxKm = Number($("perfil-raio-max").value);
   if (!cidadeTexto) { $("perfil-status").textContent = "Preencha a cidade/região."; return; }
-  if (!raioKm || raioKm <= 0) { $("perfil-status").textContent = "Preencha um raio válido."; return; }
+  if (!raioMinKm || raioMinKm <= 0 || !raioMaxKm || raioMaxKm <= 0) { $("perfil-status").textContent = "Preencha os dois raios."; return; }
+  if (raioMaxKm < raioMinKm) { $("perfil-status").textContent = "O raio máximo precisa ser maior ou igual ao mínimo."; return; }
 
   const btn = $("btn-perfil-salvar");
   btn.disabled = true;
@@ -228,8 +230,8 @@ $("btn-perfil-salvar").addEventListener("click", async () => {
     return;
   }
 
-  salvarPerfilBusca({ cidade: cidadeTexto, lat: alvo.lat, lng: alvo.lng, raioKm });
-  $("perfil-status").textContent = `Região salva: ${cidadeTexto}, raio de ${raioKm}km.`;
+  salvarPerfilBusca({ cidade: cidadeTexto, lat: alvo.lat, lng: alvo.lng, raioMinKm, raioMaxKm });
+  $("perfil-status").textContent = `Região salva: ${cidadeTexto}, raio ${raioMinKm}-${raioMaxKm}km.`;
 });
 
 // ---------------------------------------------------------------- OS list
