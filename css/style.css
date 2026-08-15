@@ -86,6 +86,21 @@ input, textarea, select{
 input::placeholder, textarea::placeholder{color:#5d6b8c}
 label{display:flex; flex-direction:column; gap:6px; font-size:13px; color:var(--muted); margin-bottom:12px}
 form{display:flex; flex-direction:column}
+.checkbox-row{flex-direction:row; align-items:center; gap:8px}
+.checkbox-row input[type=checkbox]{width:20px; height:20px; flex:none}
+
+/* ---- ocr: servidor local do PC ---- */
+.ocr-local-config{
+  background:var(--card); border:1px solid var(--border); border-radius:10px;
+  padding:10px 14px; margin-bottom:12px;
+}
+.ocr-local-config summary{cursor:pointer; font-size:13px; color:var(--muted)}
+.ocr-local-config label{margin-top:10px; margin-bottom:0}
+.ocr-local-config label + label{margin-top:10px}
+.ocr-local-config .checkbox-row{margin-top:10px}
+.ocr-local-status-row{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:8px}
+.ocr-local-config #ocr-local-status{margin:0}
+.btn-testar-servidor{flex:none; padding:6px 10px; font-size:12px; white-space:nowrap}
 
 .btn{
   border:none; border-radius:10px; padding:13px 18px; font-size:15px; font-weight:600;
@@ -127,6 +142,7 @@ form{display:flex; flex-direction:column}
 .badge-planejada{background:#1e2f4d; color:var(--primary)}
 .badge-em_andamento{background:#3a3220; color:var(--warn)}
 .badge-adiada{background:#332047; color:#b98cf5}
+.prazo-destaque{color:var(--warn); font-weight:700; display:block}
 
 .empty{color:var(--muted); text-align:center; margin-top:40px; font-size:14px}
 
@@ -149,7 +165,7 @@ form{display:flex; flex-direction:column}
 .btn-girar{flex:none; padding:6px 10px; font-size:12px; white-space:nowrap}
 .foto-zoom-scroll{max-height:65vh; overflow:auto; -webkit-overflow-scrolling:touch; border-radius:var(--radius); background:var(--card-2); touch-action:pan-x pan-y}
 .foto-zoom-inner{position:relative; line-height:0}
-.ocr-overlay{position:absolute; inset:0; --ocr-overlay-opacity:0.85}
+.ocr-overlay{position:absolute; inset:0; --ocr-overlay-opacity:0.15}
 .ocr-word{
   position:absolute; white-space:nowrap; cursor:text; line-height:1.15;
   font-weight:700; color:#eaf1ff; background:rgba(15,23,42,.72);
@@ -217,7 +233,11 @@ form{display:flex; flex-direction:column}
 .stop-note-saved{font-size:11px; color:var(--ok); margin-top:4px; min-height:14px}
 
 /* ---- floating widget ---- */
-#floating-widget{position:fixed; right:16px; bottom:94px; z-index:40}
+/* z-index bem alto de propósito: o Leaflet usa z-index internos de até ~700 nos próprios panes
+   (marcadores, popups) e, sem isolar o container do mapa, esses valores competem diretamente com
+   qualquer outro elemento da página — a parte de cima deste painel (nome do cliente) ficava
+   escondida atrás do mapa quando os dois se sobrepunham na tela. */
+#floating-widget{position:fixed; right:16px; bottom:94px; z-index:1000}
 .floating-bubble{
   width:52px; height:52px; border-radius:50%;
   background:var(--primary); color:white; border:none;

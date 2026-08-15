@@ -51,3 +51,21 @@ export async function optimizeTrip(stops, origin) {
     geometry: null,
   };
 }
+
+// Calcula distância/duração/geometria pra uma ordem de paradas JÁ DECIDIDA (usa o serviço /route
+// do OSRM, que — ao contrário do /trip usado em optimizeTrip — nunca reordena os pontos). Usado
+// quando a ordem já foi definida na mão (ex: prioridade por horário limite) e só precisamos saber
+// o "custo" real (km/min/traçado) de percorrer essa sequência específica.
+export async function routeInOrder(stops, origin) {
+  const points = origin ? [origin, ...stops] : stops;
+  if (points.length < 2) return { distanceKm: 0, durationMin: 0, geometry: null };
+  const coordStr = points.map((p) => `${p.lng},${p.lat}`).join(";");
+  const url = `https://router.project-osrm.org/route/v1/driving/${coordStr}?overview=full&geometries=geojson`;
+
+  const res = await fetch(url);
+  const data = await res.json();
+  if (data.code !== "Ok") throw new Error("Não foi possível calcular a rota (" + data.code + ")");
+
+  const route = data.routes[0];
+  return { distanceKm: route.distance / 1000, durationMin: route.duration / 60, geometry: route.geometry };
+}

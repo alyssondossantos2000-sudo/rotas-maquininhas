@@ -2,7 +2,7 @@
 // As duas bibliotecas rodam 100% no navegador via WASM — sem servidor, sem custo, mesmo princípio
 // do Tesseract.js já usado no resto do app. Carregadas SOB DEMANDA (só quando a aba "Por foto"
 // abre ou uma foto é processada), pra não pesar o carregamento inicial do app com ~8MB de WASM.
-import { comLog } from "../core/logger.js?v=16";
+import { comLog } from "../core/logger.js?v=19";
 
 const OPENCV_URL = "https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.10.0-release.1/dist/opencv.js";
 const JSCANIFY_URL = "https://cdn.jsdelivr.net/npm/jscanify@1.4.3/src/jscanify.min.js";
@@ -65,6 +65,27 @@ function canvasReduzido(bitmap, maxDim) {
   return canvas;
 }
 
+// Expande os 4 cantos detectados pra fora, a partir do centro do quadrilátero — achado testando
+// com foto real: a detecção às vezes acerta o contorno "justo demais" (sombra da mão segurando o
+// papel, dobra na borda, etc conta como se fosse a borda do documento) e recorta um pedaço de
+// conteúdo de verdade (texto colado na borda, canto do formulário). Uma margem pequena pra fora
+// evita cortar conteúdo por causa de um contorno um pouco apertado, sem enfraquecer o
+// endireitamento da perspectiva pra fotos tiradas de ângulo.
+function expandirCantos(cantos, largura, altura, margem) {
+  const cx = (cantos.topLeftCorner.x + cantos.topRightCorner.x + cantos.bottomLeftCorner.x + cantos.bottomRightCorner.x) / 4;
+  const cy = (cantos.topLeftCorner.y + cantos.topRightCorner.y + cantos.bottomLeftCorner.y + cantos.bottomRightCorner.y) / 4;
+  const expandir = (p) => ({
+    x: Math.min(largura, Math.max(0, cx + (p.x - cx) * (1 + margem))),
+    y: Math.min(altura, Math.max(0, cy + (p.y - cy) * (1 + margem))),
+  });
+  return {
+    topLeftCorner: expandir(cantos.topLeftCorner),
+    topRightCorner: expandir(cantos.topRightCorner),
+    bottomLeftCorner: expandir(cantos.bottomLeftCorner),
+    bottomRightCorner: expandir(cantos.bottomRightCorner),
+  };
+}
+
 // Área do quadrilátero (fórmula do polígono/shoelace) — usada só pra sanity-check da detecção.
 function areaQuadrilatero(c) {
   const pts = [c.topLeftCorner, c.topRightCorner, c.bottomRightCorner, c.bottomLeftCorner];
@@ -76,6 +97,15 @@ function areaQuadrilatero(c) {
   return Math.abs(area) / 2;
 }
 
+// DESLIGADO de propósito (2026-07-29): mesmo com a margem de segurança (expandirCantos, 6%), o
+// recorte automático continuou cortando conteúdo real em fotos reais — 3 casos confirmados no
+// mesmo dia, o último cortando até a logo "Cielo" do topo do formulário. Ajustar a margem às cegas
+// de novo arrisca só trocar "corta o topo" por "corta o rodapé" sem garantia nenhuma. Mais seguro
+// desligar o recorte inteiro e sempre usar a foto cheia (mesma lição já documentada mais abaixo:
+// melhor não recortar errado do que "corrigir" pra pior) até valer a pena investir em algo mais
+// confiável que uma margem fixa chutada.
+const ATIVO = false;
+
 // Acha os 4 cantos do papel na foto. Detecta numa cópia reduzida (rápido) e devolve os cantos já
 // escalados pras coordenadas da imagem ORIGINAL, prontos pra recortar em resolução total.
 //
@@ -85,6 +115,7 @@ function areaQuadrilatero(c) {
 // — melhor não recortar errado do que "corrigir" pra pior (mesma lição da sessão anterior: pré-
 // processamento automático que erra pode piorar mais do que ajudar).
 export async function detectarDocumento(bitmap, onStatus) {
+  if (!ATIVO) return null;
   await garantirOpenCvCarregado(onStatus);
   onStatus?.("Procurando o documento na foto...");
 
@@ -104,12 +135,13 @@ export async function detectarDocumento(bitmap, onStatus) {
     if (areaRel < 0.15 || areaRel > 0.98) return null;
 
     const escalar = (p) => ({ x: p.x * escala, y: p.y * escala });
-    return {
+    const cantosOriginais = {
       topLeftCorner: escalar(cantos.topLeftCorner),
       topRightCorner: escalar(cantos.topRightCorner),
       bottomLeftCorner: escalar(cantos.bottomLeftCorner),
       bottomRightCorner: escalar(cantos.bottomRightCorner),
     };
+    return expandirCantos(cantosOriginais, bitmap.width, bitmap.height, 0.06);
   } finally {
     mat.delete?.();
   }

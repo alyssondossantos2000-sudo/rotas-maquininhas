@@ -21,6 +21,7 @@
   "dependencies": {
     "@capacitor-mlkit/text-recognition": "^8.2.0",
     "@capacitor/android": "^8.4.2",
+    "@capacitor/camera": "^8.2.1",
     "@capacitor/cli": "^8.4.2",
     "@capacitor/core": "^8.4.2",
     "@capacitor/filesystem": "^8.1.2"

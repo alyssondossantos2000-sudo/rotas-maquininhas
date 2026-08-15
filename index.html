@@ -9,7 +9,7 @@
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/icon.svg">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="css/style.css?v=16">
+<link rel="stylesheet" href="css/style.css?v=19">
 </head>
 <body>
 
@@ -81,6 +81,16 @@
           <option value="Ton">Ton</option>
         </select>
       </label>
+      <details class="ocr-local-config">
+        <summary>🖥️ Servidor OCR do PC (opcional, mesma rede Wi-Fi)</summary>
+        <label>IP do PC<input type="text" id="ocr-local-ip" placeholder="192.168.1.102"></label>
+        <label>Porta<input type="text" id="ocr-local-porta" placeholder="8877"></label>
+        <label class="checkbox-row"><input type="checkbox" id="ocr-local-ia"> Modo capricho (mais lento, corrige com IA)</label>
+        <div class="ocr-local-status-row">
+          <p id="ocr-local-status" class="muted"></p>
+          <button type="button" id="ocr-local-retestar" class="btn btn-secondary btn-testar-servidor">🔄 Testar de novo</button>
+        </div>
+      </details>
       <div class="btn-row">
         <label class="btn btn-secondary" for="foto-input-camera">📷 Tirar foto</label>
         <label class="btn btn-secondary" for="foto-input-galeria">🖼️ Da galeria</label>
@@ -104,7 +114,7 @@
     </div>
     <div id="ocr-raw-wrap" class="ocr-raw-wrap hidden">
       <label class="ocr-opacity-label">Opacidade do texto sobreposto na foto
-        <input type="range" id="ocr-opacity" min="0" max="100" value="85">
+        <input type="range" id="ocr-opacity" min="0" max="100" value="15">
       </label>
       <p class="muted">Arraste o dedo em cima do texto (na foto acima) pra selecionar, depois toque no campo pra jogar ele lá:</p>
       <div class="ocr-assign-row">
@@ -132,6 +142,8 @@
       <label>Contato (telefone/WhatsApp)<input type="tel" id="os-contato" placeholder="(11) 91234-5678"></label>
       <label>Banco<input type="text" id="os-banco"></label>
       <label>Serviço<input type="text" id="os-servico" placeholder="Instalação, troca, manutenção..."></label>
+      <label>Horário limite (opcional)<input type="time" id="os-prazo"></label>
+      <p class="muted">Se preencher, essa parada entra na frente das outras na hora de montar/reotimizar a rota.</p>
       <label>Observações<textarea id="os-obs" rows="2"></textarea></label>
       <div class="btn-row">
         <button type="button" id="btn-os-cancel" class="btn btn-ghost">Cancelar</button>
@@ -202,7 +214,7 @@
       </div>
       <div id="qp-ocr-raw-wrap" class="ocr-raw-wrap hidden">
         <label class="ocr-opacity-label">Opacidade do texto sobreposto na foto
-          <input type="range" id="qp-ocr-opacity" min="0" max="100" value="85">
+          <input type="range" id="qp-ocr-opacity" min="0" max="100" value="15">
         </label>
         <p class="muted">Selecione o texto na foto e toque no campo pra jogar ele lá:</p>
         <div class="ocr-assign-row">
@@ -222,6 +234,7 @@
         <label>Tipo de serviço<input type="text" name="servico" placeholder="Instalação, troca, manutenção..."></label>
         <label>Máquina<input type="text" name="maquina" placeholder="Cielo, Stone, Sicredi..."></label>
         <label>Contato (opcional)<input type="tel" name="contato" placeholder="(67) 91234-5678"></label>
+        <label>Horário limite (opcional)<input type="time" name="prazo"></label>
         <label>Observações (opcional)<textarea name="obs" rows="2"></textarea></label>
         <button type="submit" class="btn btn-secondary btn-block">+ Adicionar parada</button>
         <p class="qp-status muted"></p>
@@ -282,7 +295,7 @@
       </div>
       <div id="qpd-ocr-raw-wrap" class="ocr-raw-wrap hidden">
         <label class="ocr-opacity-label">Opacidade do texto sobreposto na foto
-          <input type="range" id="qpd-ocr-opacity" min="0" max="100" value="85">
+          <input type="range" id="qpd-ocr-opacity" min="0" max="100" value="15">
         </label>
         <p class="muted">Selecione o texto na foto e toque no campo pra jogar ele lá:</p>
         <div class="ocr-assign-row">
@@ -302,6 +315,7 @@
         <label>Tipo de serviço<input type="text" name="servico" placeholder="Instalação, troca, manutenção..."></label>
         <label>Máquina<input type="text" name="maquina" placeholder="Cielo, Stone, Sicredi..."></label>
         <label>Contato (opcional)<input type="tel" name="contato" placeholder="(67) 91234-5678"></label>
+        <label>Horário limite (opcional)<input type="time" name="prazo"></label>
         <label>Observações (opcional)<textarea name="obs" rows="2"></textarea></label>
         <button type="submit" class="btn btn-primary btn-block">+ Adicionar à rota</button>
         <p class="qp-status muted"></p>
@@ -343,6 +357,6 @@
      Pages) essa tag dá 404 inofensivo, o código só usa window.NativePlugins quando roda dentro
      do app nativo. Ver native/entry.js. -->
 <script src="vendor/native-plugins.js"></script>
-<script type="module" src="js/app.js?v=16"></script>
+<script type="module" src="js/app.js?v=19"></script>
 </body>
 </html>

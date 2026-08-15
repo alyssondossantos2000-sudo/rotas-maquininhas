@@ -14,6 +14,7 @@
 export function normalizarResultado(dadosBrutos) {
   if (Array.isArray(dadosBrutos.lines) && dadosBrutos.lines[0]?.words) return normalizarTesseract(dadosBrutos);
   if (Array.isArray(dadosBrutos.blocks)) return normalizarMlKit(dadosBrutos);
+  if (Array.isArray(dadosBrutos.palavras)) return normalizarServidorLocal(dadosBrutos);
   return { palavras: [], textoBruto: dadosBrutos.text || "" };
 }
 
@@ -30,6 +31,53 @@ function normalizarTesseract(dadosBrutos) {
     });
   });
   return { palavras, textoBruto: dadosBrutos.text || "" };
+}
+
+function medianaOuPadrao(valores, padrao) {
+  if (!valores.length) return padrao;
+  const ordenado = [...valores].sort((a, b) => a - b);
+  return ordenado[Math.floor(ordenado.length / 2)];
+}
+
+// O servidor OCR local (PaddleOCR) já devolve cada palavra no formato final (texto/bbox/confiança,
+// ver CONTEXTO_OCR_LOCAL.md) mas achatado, sem agrupamento por linha — diferente do Tesseract e do
+// ML Kit, que já vêm organizados em lines[]/blocks[]. Agrupamos aqui por proximidade vertical do
+// centro do bbox de cada palavra, igual reconstruirLayout (blockDetection.js) agrupa linha→bloco.
+function normalizarServidorLocal(dadosBrutos) {
+  const brutas = dadosBrutos.palavras || [];
+  const alturaMediana = medianaOuPadrao(brutas.map((p) => p.bbox.y1 - p.bbox.y0), 20);
+  const limiar = alturaMediana * 0.6;
+
+  const linhas = [];
+  [...brutas]
+    .sort((a, b) => (a.bbox.y0 + a.bbox.y1) / 2 - (b.bbox.y0 + b.bbox.y1) / 2)
+    .forEach((p) => {
+      const centroY = (p.bbox.y0 + p.bbox.y1) / 2;
+      let linha = linhas.find((l) => Math.abs(l.centroY - centroY) <= limiar);
+      if (!linha) {
+        linha = { centroY, itens: [] };
+        linhas.push(linha);
+      }
+      linha.itens.push(p);
+      linha.centroY = linha.itens.reduce((soma, it) => soma + (it.bbox.y0 + it.bbox.y1) / 2, 0) / linha.itens.length;
+    });
+
+  const palavras = [];
+  linhas.forEach((linha, indiceLinha) => {
+    [...linha.itens].sort((a, b) => a.bbox.x0 - b.bbox.x0).forEach((p) => {
+      palavras.push({
+        texto: p.texto,
+        bbox: { x0: p.bbox.x0, y0: p.bbox.y0, x1: p.bbox.x1, y1: p.bbox.y1 },
+        confianca: typeof p.confianca === "number" ? p.confianca : null,
+        linha: indiceLinha,
+      });
+    });
+  });
+
+  // ia_usada=true: texto_ia é o texto corrigido pela IA olhando a imagem — mais confiável pro
+  // fallback de texto puro. As palavras/bbox continuam sempre vindo cruas do PaddleOCR (ver doc).
+  const textoBruto = (dadosBrutos.ia_usada && dadosBrutos.texto_ia) || dadosBrutos.texto || "";
+  return { palavras, textoBruto };
 }
 
 // O ML Kit não expõe confiança por palavra (ao contrário do Tesseract) — fica null, e o resto do

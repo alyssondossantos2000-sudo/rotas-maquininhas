@@ -12,5 +12,6 @@
 import "@capacitor/core";
 import { Filesystem, Directory } from "@capacitor/filesystem";
 import { TextRecognition } from "@capacitor-mlkit/text-recognition";
+import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 
-window.NativePlugins = { Filesystem, Directory, TextRecognition };
+window.NativePlugins = { Filesystem, Directory, TextRecognition, Camera, CameraResultType, CameraSource };

@@ -1,5 +1,11 @@
 {
   "appId": "com.rotasmaquininhas.app",
   "appName": "Rotas Maquininhas",
-  "webDir": "www"
+  "webDir": "www",
+  "server": {
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true
+  }
 }

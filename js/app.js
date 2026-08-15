@@ -1,7 +1,8 @@
-import { supabase } from "./supabaseClient.js?v=16";
-import { geocodeAddress } from "./geocode.js?v=16";
-import { optimizeTrip } from "./osrm.js?v=16";
-import { criarCapturaDocumento, prepararPipeline } from "./ui/capture.js?v=16";
+import { supabase } from "./supabaseClient.js?v=19";
+import { geocodeAddress } from "./geocode.js?v=19";
+import { optimizeTrip, routeInOrder } from "./osrm.js?v=19";
+import { criarCapturaDocumento, prepararPipeline, recuperarFotoInterrompida } from "./ui/capture.js?v=19";
+import { lerConfigServidorLocal, salvarConfigServidorLocal, criarLocalServerProvider } from "./ocr/localServerProvider.js?v=19";
 
 // ---------------------------------------------------------------- state
 let currentUser = null;
@@ -46,6 +47,7 @@ function showView(name) {
   document.querySelectorAll(".view").forEach((v) => v.classList.add("hidden"));
   $(`view-${name}`).classList.remove("hidden");
   document.querySelectorAll(".nav-btn").forEach((b) => b.classList.toggle("active", b.dataset.view === name));
+  localStorage.setItem("rm_last_view", name);
 
   const titles = {
     "os-list": "Ordens de Serviço",
@@ -58,7 +60,53 @@ function showView(name) {
 
   if (name !== "rota-detail" && detailMap) { detailMap.remove(); detailMap = null; }
   if (name !== "os-form" && osFormMap) { osFormMap.remove(); osFormMap = null; }
-  if (name !== "rota-detail") $("floating-widget").classList.add("hidden");
+  if (name !== "rota-detail") {
+    $("floating-widget").classList.add("hidden");
+    window.Capacitor?.Plugins?.BubbleOverlay?.hide().catch(() => {});
+  }
+}
+
+// Restaura a última tela aberta ao entrar — importante porque o Android às vezes destrói e recria
+// a Activity/WebView do zero enquanto o app de Câmera fica em primeiro plano (visto no log do
+// Capacitor: "App restarted"), o que reseta toda a navegação em memória. Sem isso, "Tirar foto"
+// jogava o usuário de volta pra lista de OS sem motivo aparente.
+// O supabase-js dispara onAuthStateChange uma vez IMEDIATAMENTE ao assinar (com a sessão que já
+// existia), então init() acaba chamando afterAuthChange()/restaurarUltimaTela() duas vezes seguidas
+// no boot. Isso sempre foi inofensivo (showView/openOsForm são idempotentes) até a recuperação de
+// foto interrompida entrar em cena: a 2ª chamada roda openOsForm(null) — que esconde
+// foto-preview-wrap como parte do reset padrão — bem depois da 1ª chamada já ter mostrado a foto
+// recuperada, escondendo ela nn de novo mesmo com tudo certo no DOM (achado inspecionando o DOM ao
+// vivo: imagem carregada, overlay montado, só o wrapper com "hidden"). Só a 1ª chamada de verdade
+// importa, então trava pra rodar uma vez só por carregamento de página.
+let restauracaoFeita = false;
+function restaurarUltimaTela() {
+  if (restauracaoFeita) return;
+  restauracaoFeita = true;
+  const ultimaView = localStorage.getItem("rm_last_view");
+  if (ultimaView === "os-form") {
+    // Captura ANTES de abrir o form: openOsForm() já chama switchTab("manual") por dentro (reset
+    // padrão do form), o que sobrescreveria esse valor salvo antes de conseguirmos ler.
+    const ultimaTab = localStorage.getItem("rm_last_phototab");
+    openOsForm(null);
+    if (ultimaTab === "foto") {
+      switchTab("foto");
+      // Se a recriação aconteceu bem no meio de "Tirar foto", a foto já tá salva no celular —
+      // recupera sozinho em vez de deixar o usuário achando que sumiu (ver capture.js).
+      recuperarFotoInterrompida().then((blob) => {
+        if (blob) capturaOsForm.processarFotoRecuperada(blob);
+      });
+    }
+  } else if (ultimaView === "rotas-list") {
+    showView("rotas-list");
+    loadRotas();
+  } else if (ultimaView === "rota-detail") {
+    const ultimaRotaId = localStorage.getItem("rm_last_rota_id");
+    if (ultimaRotaId) openRotaDetail(ultimaRotaId);
+    else { showView("rotas-list"); loadRotas(); }
+  } else {
+    showView("os-list");
+    loadOsList();
+  }
 }
 
 function fmtKm(km) { return km == null ? "-" : `${km.toFixed(1)} km`; }
@@ -80,8 +128,7 @@ function afterAuthChange() {
     $("view-login").classList.add("hidden");
     $("app-header").classList.remove("hidden");
     $("bottom-nav").classList.remove("hidden");
-    showView("os-list");
-    loadOsList();
+    restaurarUltimaTela();
   } else {
     $("app-header").classList.add("hidden");
     $("bottom-nav").classList.add("hidden");
@@ -174,7 +221,10 @@ function renderOsList(list) {
         <span class="badge badge-${os.status}">${STATUS_LABEL[os.status]}</span>
       </div>
       <div class="card-sub">📍 ${escapeHtml(os.endereco)}</div>
+      ${os.geocode_status === "aproximado" ? `<div class="card-sub prazo-destaque">⚠️ Localização aproximada — confira o pino em "Editar" antes de ir</div>` : ""}
+      ${os.geocode_status === "falhou" ? `<div class="card-sub prazo-destaque">⚠️ Endereço não localizado — ajuste em "Editar"</div>` : ""}
       <div class="card-sub">${os.banco ? "🏦 " + escapeHtml(os.banco) + " · " : ""}${os.servico ? escapeHtml(os.servico) : ""}</div>
+      ${os.prazo_entrega ? `<div class="card-sub prazo-destaque">${prazoLabel(os)}</div>` : ""}
       <div class="card-actions">
         <button class="btn btn-secondary btn-edit">Editar</button>
         <button class="btn btn-ghost btn-del">Excluir</button>
@@ -192,6 +242,12 @@ function escapeHtml(s) {
 // Paradas cadastradas rápido (direto na aba Rotas) podem não ter número de OS.
 function osLabel(os) {
   return os.numero_os ? `OS ${escapeHtml(os.numero_os)} — ${escapeHtml(os.nome_cliente)}` : escapeHtml(os.nome_cliente);
+}
+
+// "10:00:00" (formato time do Postgres) -> "10:00" pra mostrar. Campo opcional — null/vazio na
+// maioria das OS.
+function prazoLabel(os) {
+  return os.prazo_entrega ? `⏰ até ${os.prazo_entrega.slice(0, 5)}` : "";
 }
 
 async function deleteOs(id) {
@@ -228,6 +284,7 @@ function openOsForm(id) {
       $("os-contato").value = os.contato || "";
       $("os-banco").value = os.banco || "";
       $("os-servico").value = os.servico || "";
+      $("os-prazo").value = os.prazo_entrega ? os.prazo_entrega.slice(0, 5) : "";
       $("os-obs").value = os.observacoes || "";
       if (os.lat != null && os.lng != null) osFormPin = { lat: os.lat, lng: os.lng };
     }
@@ -285,16 +342,58 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
 function switchTab(tab) {
   document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   $("tab-foto").classList.toggle("hidden", tab !== "foto");
+  localStorage.setItem("rm_last_phototab", tab);
   // Começa a preparar o pipeline de leitura (OCR + detecção de documento) assim que a aba "Por
   // foto" abre, antes da foto ser tirada — assim o tempo de download/inicialização fica escondido
   // enquanto o usuário fotografa.
   if (tab === "foto") prepararPipeline();
 }
 
+// Configuração do servidor OCR local do PC — só faz sentido dentro do app nativo (a checagem de
+// disponibilidade em provider.js já ignora isso no site). Escondido no navegador comum pra não
+// confundir com uma opção que ali não tem efeito nenhum.
+const ocrLocalNativo = window.Capacitor?.isNativePlatform?.() === true;
+const ocrLocalConfigEl = document.querySelector(".ocr-local-config");
+if (ocrLocalConfigEl) ocrLocalConfigEl.classList.toggle("hidden", !ocrLocalNativo);
+
+if (ocrLocalNativo) {
+  const ipInput = $("ocr-local-ip");
+  const portaInput = $("ocr-local-porta");
+  const iaInput = $("ocr-local-ia");
+  const statusEl = $("ocr-local-status");
+  const retestarBtn = $("ocr-local-retestar");
+  const configInicial = lerConfigServidorLocal();
+  ipInput.value = configInicial.ip;
+  portaInput.value = configInicial.porta;
+  iaInput.checked = configInicial.ia;
+
+  const localProviderTeste = criarLocalServerProvider();
+  const testarDisponibilidade = async () => {
+    const config = { ip: ipInput.value.trim(), porta: Number(portaInput.value) || 8877, ia: iaInput.checked };
+    if (!config.ip) { statusEl.textContent = ""; return; }
+    statusEl.textContent = "Verificando...";
+    const ok = await localProviderTeste.disponivel(config);
+    statusEl.textContent = ok ? "🟢 PC conectado" : "🔴 PC não encontrado nessa rede";
+  };
+
+  const salvarESet = () => {
+    salvarConfigServidorLocal({ ip: ipInput.value.trim(), porta: Number(portaInput.value) || 8877, ia: iaInput.checked });
+    testarDisponibilidade();
+  };
+  ipInput.addEventListener("change", salvarESet);
+  portaInput.addEventListener("change", salvarESet);
+  iaInput.addEventListener("change", salvarESet);
+  // Botão manual: pro caso comum de ligar o servidor no PC DEPOIS de já ter aberto o app no
+  // celular — sem isso só reconectava editando o IP de novo ou reabrindo o app inteiro.
+  retestarBtn.addEventListener("click", testarDisponibilidade);
+  if (configInicial.ip) testarDisponibilidade();
+}
+
 let ultimaOrigemCadastro = "manual";
 
-criarCapturaDocumento({
+const capturaOsForm = criarCapturaDocumento({
   fileInputs: [$("foto-input-camera"), $("foto-input-galeria")],
+  cameraInput: $("foto-input-camera"),
   previewWrap: $("foto-preview-wrap"),
   previewImg: $("foto-preview"),
   overlay: $("ocr-overlay"),
@@ -315,6 +414,9 @@ criarCapturaDocumento({
     if (fields.contato) $("os-contato").value = fields.contato;
     if (fields.banco) $("os-banco").value = fields.banco;
     if (fields.servico) $("os-servico").value = fields.servico;
+    // Horário limite fica de fora do preenchimento automático de propósito — usuário prefere
+    // digitar esse sempre na mão.
+    if (fields.observacoes) $("os-obs").value = fields.observacoes;
   },
 });
 
@@ -325,10 +427,12 @@ function autoFillParadaRapida(form, fields) {
   if (fields.contato) form.elements.contato.value = fields.contato;
   if (fields.banco) form.elements.maquina.value = fields.banco;
   if (fields.servico) form.elements.servico.value = fields.servico;
+  if (fields.observacoes) form.elements.obs.value = fields.observacoes;
 }
 
 criarCapturaDocumento({
   fileInputs: [$("qp-foto-input-camera"), $("qp-foto-input-galeria")],
+  cameraInput: $("qp-foto-input-camera"),
   previewWrap: $("qp-foto-preview-wrap"),
   previewImg: $("qp-foto-preview"),
   overlay: $("qp-ocr-overlay"),
@@ -346,6 +450,7 @@ criarCapturaDocumento({
 
 criarCapturaDocumento({
   fileInputs: [$("qpd-foto-input-camera"), $("qpd-foto-input-galeria")],
+  cameraInput: $("qpd-foto-input-camera"),
   previewWrap: $("qpd-foto-preview-wrap"),
   previewImg: $("qpd-foto-preview"),
   overlay: $("qpd-ocr-overlay"),
@@ -372,6 +477,7 @@ $("form-os").addEventListener("submit", async (e) => {
     contato: $("os-contato").value.trim(),
     banco: $("os-banco").value.trim(),
     servico: $("os-servico").value.trim(),
+    prazo_entrega: $("os-prazo").value || null,
     observacoes: $("os-obs").value.trim(),
   };
   if (!payload.numero_os || !payload.nome_cliente || !payload.endereco) {
@@ -391,7 +497,7 @@ $("form-os").addEventListener("submit", async (e) => {
     const geo = await geocodeAddress(payload.endereco);
     payload.lat = geo ? geo.lat : null;
     payload.lng = geo ? geo.lng : null;
-    payload.geocode_status = geo ? "ok" : "falhou";
+    payload.geocode_status = geo ? (geo.aproximado ? "aproximado" : "ok") : "falhou";
   }
 
   submitBtn.textContent = "Salvando...";
@@ -522,12 +628,13 @@ function wireQuickAddForm(form, onAdded) {
       servico: form.elements.servico.value.trim(),
       banco: form.elements.maquina.value.trim(),
       contato: form.elements.contato.value.trim(),
+      prazo_entrega: form.elements.prazo.value || null,
       observacoes: form.elements.obs.value.trim(),
       status: "pendente",
       origem_cadastro: origemPorFormulario.get(form) || "manual",
       lat: geo ? geo.lat : null,
       lng: geo ? geo.lng : null,
-      geocode_status: geo ? "ok" : "falhou",
+      geocode_status: geo ? (geo.aproximado ? "aproximado" : "ok") : "falhou",
     };
 
     const { data: inserted, error } = await supabase.from("ordens_servico").insert(payload).select().single();
@@ -536,7 +643,11 @@ function wireQuickAddForm(form, onAdded) {
 
     form.reset();
     origemPorFormulario.set(form, "manual");
-    statusEl.textContent = geo ? "Parada adicionada!" : "Parada adicionada, mas não localizei o endereço — ajuste depois em \"OS\" > Editar.";
+    statusEl.textContent = !geo
+      ? "Parada adicionada, mas não localizei o endereço — ajuste depois em \"OS\" > Editar."
+      : geo.aproximado
+      ? "Parada adicionada, mas o endereço é aproximado — confira o pino em \"OS\" > Editar antes de ir."
+      : "Parada adicionada!";
     await onAdded(inserted);
   });
 }
@@ -581,6 +692,35 @@ $("btn-usar-gps").addEventListener("click", () => {
   );
 });
 
+// Paradas com "horário limite" (prazo_entrega) preenchido entram PRIMEIRO na rota, em ordem de
+// horário (a mais cedo primeiro) — o resto das paradas (sem prazo) é otimizado livremente por trás
+// delas. Se ninguém tiver prazo, se comporta exatamente como antes (só otimização por distância).
+// A ordem entre as paradas COM prazo é fixada pelo próprio horário (cumprir o prazo importa mais
+// que economizar uns minutos de trajeto entre elas); só o trecho sem prazo é livre pro OSRM
+// escolher a sequência mais eficiente.
+async function otimizarComPrioridadeDePrazo(stops, origin) {
+  const comPrazo = [...stops.filter((s) => s.prazo_entrega)].sort((a, b) => a.prazo_entrega.localeCompare(b.prazo_entrega));
+  const semPrazo = stops.filter((s) => !s.prazo_entrega);
+
+  if (!comPrazo.length) {
+    const result = await optimizeTrip(stops, origin);
+    return { order: result.order.map((i) => stops[i]), distanceKm: result.distanceKm, durationMin: result.durationMin, geometry: result.geometry };
+  }
+
+  let restoOrdenado = semPrazo;
+  if (semPrazo.length >= 2) {
+    const origemResto = { lat: comPrazo[comPrazo.length - 1].lat, lng: comPrazo[comPrazo.length - 1].lng };
+    const resultResto = await optimizeTrip(semPrazo, origemResto);
+    restoOrdenado = resultResto.order.map((i) => semPrazo[i]);
+  }
+
+  const ordemFinal = [...comPrazo, ...restoOrdenado];
+  const custo = ordemFinal.length >= 2
+    ? await routeInOrder(ordemFinal, origin)
+    : { distanceKm: 0, durationMin: 0, geometry: null };
+  return { order: ordemFinal, distanceKm: custo.distanceKm, durationMin: custo.durationMin, geometry: custo.geometry };
+}
+
 $("btn-otimizar").addEventListener("click", async () => {
   const selected = [...buildSelected.values()];
   if (selected.length < 2) { toast("Selecione pelo menos 2 OS para montar a rota."); return; }
@@ -595,7 +735,9 @@ $("btn-otimizar").addEventListener("click", async () => {
     const geo = await geocodeAddress(os.endereco);
     if (geo) {
       os.lat = geo.lat; os.lng = geo.lng;
-      await supabase.from("ordens_servico").update({ lat: geo.lat, lng: geo.lng, geocode_status: "ok" }).eq("id", os.id);
+      const geocode_status = geo.aproximado ? "aproximado" : "ok";
+      os.geocode_status = geocode_status;
+      await supabase.from("ordens_servico").update({ lat: geo.lat, lng: geo.lng, geocode_status }).eq("id", os.id);
     } else {
       await supabase.from("ordens_servico").update({ geocode_status: "falhou" }).eq("id", os.id);
     }
@@ -625,8 +767,8 @@ $("btn-otimizar").addEventListener("click", async () => {
 
   statusEl.textContent = "Calculando melhor rota...";
   try {
-    const result = await optimizeTrip(comCoordenadas, origin);
-    buildOrder = result.order.map((i) => comCoordenadas[i]);
+    const result = await otimizarComPrioridadeDePrazo(comCoordenadas, origin);
+    buildOrder = result.order;
     buildResult = { distanceKm: result.distanceKm, durationMin: result.durationMin, geometry: result.geometry };
     buildOrigin = origin;
 
@@ -672,7 +814,9 @@ function renderStopListEditable(container, order, onReorder, opts = {}) {
       <div class="stop-body">
         <b>${osLabel(os)} ${os.status === "adiada" ? '<span class="badge badge-adiada">Adiada</span>' : ""}</b>
         <span>📍 ${escapeHtml(os.endereco)}</span>
+        ${os.geocode_status === "aproximado" ? `<span class="prazo-destaque">⚠️ Localização aproximada — confira o pino antes de seguir</span>` : ""}
         <span>${os.banco ? "🏦 " + escapeHtml(os.banco) + " " : ""}${os.servico ? "· " + escapeHtml(os.servico) : ""}</span>
+        ${os.prazo_entrega ? `<span class="prazo-destaque">${prazoLabel(os)}</span>` : ""}
         <div class="stop-actions">
           <a class="btn btn-secondary" href="${mapsUrl(os)}" target="_blank" rel="noopener">🧭 Maps</a>
           <a class="btn btn-secondary" href="${wazeUrl(os)}" target="_blank" rel="noopener">🚗 Waze</a>
@@ -739,6 +883,49 @@ async function salvarRotaAtual() {
   return inserted.id;
 }
 
+// Compartilhadas entre a lista de paradas editável e o painel do balão flutuante — mesma ação,
+// dois lugares que podem disparar ela (usuário pode preferir abrir a rota inteira ou só apertar o
+// balão flutuante pra resolver rápido a próxima parada sem rolar a tela toda).
+async function alternarConcluido(os) {
+  const novoStatus = os.status === "concluida" ? "roteirizada" : "concluida";
+  await supabase.from("ordens_servico").update({ status: novoStatus }).eq("id", os.id);
+  os.status = novoStatus;
+  renderRotaDetail();
+}
+
+async function alternarAdiado(os) {
+  if (os.status === "adiada") {
+    os.status = "roteirizada";
+    await supabase.from("ordens_servico").update({ status: "roteirizada" }).eq("id", os.id);
+  } else {
+    os.status = "adiada";
+    detailStops = detailStops.filter((s) => s.id !== os.id);
+    detailStops.push(os);
+    await supabase.from("ordens_servico").update({ status: "adiada" }).eq("id", os.id);
+    for (let i = 0; i < detailStops.length; i++) {
+      await supabase.from("ordens_servico").update({ ordem_na_rota: i + 1 }).eq("id", detailStops[i].id);
+    }
+  }
+  renderRotaDetail();
+}
+
+// Pede a permissão "Exibir sobre outros apps" (precisa pra bolha flutuante ficar visível por cima
+// do Maps/Waze) só na primeira vez que uma rota é aberta na sessão — não repete o toast/prompt toda
+// vez que o usuário reabre uma rota, mesmo que ele acabe negando a permissão.
+let bolhaPermissaoPedida = false;
+async function garantirPermissaoBolha() {
+  const bubble = window.Capacitor?.Plugins?.BubbleOverlay;
+  if (!bubble || bolhaPermissaoPedida) return;
+  bolhaPermissaoPedida = true;
+  try {
+    const { granted } = await bubble.checkPermission();
+    if (!granted) {
+      toast('Libere "Exibir sobre outros apps" pra ver a bolha da rota por cima do Maps.');
+      await bubble.requestPermission();
+    }
+  } catch { /* plugin ausente (site/versão antiga do APK) — ignora, segue sem bolha nativa */ }
+}
+
 // ---------------------------------------------------------------- Rota detail
 async function openRotaDetail(id) {
   const { data: rota, error } = await supabase.from("rotas").select("*").eq("id", id).single();
@@ -746,6 +933,7 @@ async function openRotaDetail(id) {
   const { data: stops, error: err2 } = await supabase.from("ordens_servico").select("*").eq("rota_id", id).order("ordem_na_rota", { ascending: true });
   if (err2) { toast("Erro ao carregar paradas: " + err2.message); return; }
 
+  garantirPermissaoBolha();
   detailRota = rota;
   detailStops = stops || [];
   $("parada-rapida-detalhe-wrap").classList.add("hidden");
@@ -757,6 +945,12 @@ async function openRotaDetail(id) {
   $("qpd-ocr-status").classList.add("hidden");
   renderRotaDetail();
   showView("rota-detail");
+  // Guarda qual rota especificamente estava aberta — showView() já salva "rota-detail" como a
+  // última tela, mas sozinho isso não basta pra restaurar: precisamos saber QUAL rota reabrir (ver
+  // restaurarUltimaTela). Importante pro fluxo de tocar em Maps/Waze/WhatsApp a partir de uma
+  // parada: o Android pode matar a página enquanto esses apps ficam em primeiro plano, e sem isso
+  // o usuário voltava sempre pra lista de OS em vez de continuar na rota que estava vendo.
+  localStorage.setItem("rm_last_rota_id", id);
 }
 
 function renderRotaDetail() {
@@ -783,27 +977,8 @@ function renderRotaDetail() {
     showRemove: true,
     showPostpone: true,
     showNotes: true,
-    onToggleDone: async (os) => {
-      const novoStatus = os.status === "concluida" ? "roteirizada" : "concluida";
-      await supabase.from("ordens_servico").update({ status: novoStatus }).eq("id", os.id);
-      os.status = novoStatus;
-      renderRotaDetail();
-    },
-    onPostpone: async (os) => {
-      if (os.status === "adiada") {
-        os.status = "roteirizada";
-        await supabase.from("ordens_servico").update({ status: "roteirizada" }).eq("id", os.id);
-      } else {
-        os.status = "adiada";
-        detailStops = detailStops.filter((s) => s.id !== os.id);
-        detailStops.push(os);
-        await supabase.from("ordens_servico").update({ status: "adiada" }).eq("id", os.id);
-        for (let i = 0; i < detailStops.length; i++) {
-          await supabase.from("ordens_servico").update({ ordem_na_rota: i + 1 }).eq("id", detailStops[i].id);
-        }
-      }
-      renderRotaDetail();
-    },
+    onToggleDone: alternarConcluido,
+    onPostpone: alternarAdiado,
     onRemove: async (os) => {
       if (!confirm("Remover esta OS da rota? Ela volta para pendente.")) return;
       await supabase.from("ordens_servico").update({ rota_id: null, ordem_na_rota: null, status: "pendente" }).eq("id", os.id);
@@ -845,31 +1020,84 @@ function updateFloatingWidget() {
   const widget = $("floating-widget");
   const proxima = detailStops.find((s) => s.status === "roteirizada" || s.status === "adiada");
 
-  if (!proxima) { widget.classList.add("hidden"); return; }
+  if (!proxima) {
+    widget.classList.add("hidden");
+    window.Capacitor?.Plugins?.BubbleOverlay?.hide().catch(() => {});
+    return;
+  }
   widget.classList.remove("hidden");
 
   const idx = detailStops.indexOf(proxima);
   $("floating-bubble-num").textContent = idx + 1;
+  sincronizarBolhaNativa(proxima, idx + 1);
 
   $("floating-panel-body").innerHTML = `
     <b>${osLabel(proxima)}</b>
     <div class="fp-line">📍 ${escapeHtml(proxima.endereco)}</div>
+    ${proxima.geocode_status === "aproximado" ? `<div class="fp-line prazo-destaque">⚠️ Localização aproximada — confira o pino antes de seguir</div>` : ""}
     ${proxima.banco || proxima.servico ? `<div class="fp-line">${proxima.banco ? "🏦 " + escapeHtml(proxima.banco) + " " : ""}${proxima.servico ? "· " + escapeHtml(proxima.servico) : ""}</div>` : ""}
+    ${proxima.prazo_entrega ? `<div class="fp-line prazo-destaque">${prazoLabel(proxima)}</div>` : ""}
     ${proxima.observacoes ? `<div class="fp-line">📝 ${escapeHtml(proxima.observacoes)}</div>` : ""}
     <div class="stop-actions">
       <a class="btn btn-secondary" href="${mapsUrl(proxima)}" target="_blank" rel="noopener">🧭 Maps</a>
       <a class="btn btn-secondary" href="${wazeUrl(proxima)}" target="_blank" rel="noopener">🚗 Waze</a>
       ${whatsUrl(proxima) ? `<a class="btn btn-secondary" href="${whatsUrl(proxima)}" target="_blank" rel="noopener">💬 WhatsApp</a>` : ""}
-      <button class="btn btn-primary" id="floating-btn-concluir">Concluir</button>
+      <button class="btn btn-secondary" id="floating-btn-postpone">${proxima.status === "adiada" ? "Retomar" : "Deixar p/ depois"}</button>
+      <button class="btn btn-primary" id="floating-btn-concluir">✅ Entregue</button>
     </div>`;
 
   $("floating-btn-concluir").addEventListener("click", async () => {
-    await supabase.from("ordens_servico").update({ status: "concluida" }).eq("id", proxima.id);
-    proxima.status = "concluida";
     $("floating-panel").classList.add("hidden");
-    renderRotaDetail();
+    await alternarConcluido(proxima);
+    abrirMapsProximaParada();
+  });
+  $("floating-btn-postpone").addEventListener("click", async () => {
+    $("floating-panel").classList.add("hidden");
+    await alternarAdiado(proxima);
+    abrirMapsProximaParada();
   });
 }
+
+// Encadeia direto pro Maps da parada seguinte assim que a atual é resolvida (entregue ou deixada
+// pra depois) — pedido explícito pra não precisar tocar em mais nada depois de resolver uma parada,
+// nem pela bolha nativa nem pelo painel de dentro do app.
+function abrirMapsProximaParada() {
+  const novaProxima = detailStops.find((s) => s.status === "roteirizada" || s.status === "adiada");
+  if (novaProxima) window.open(mapsUrl(novaProxima), "_blank");
+}
+
+// Manda os mesmos dados do painel flutuante de dentro do app pra bolha nativa (fora do app, por
+// cima do Maps/Waze/qualquer coisa) — ver BubbleOverlayPlugin/BubbleOverlayService no android/.
+// Falha em silêncio se o plugin não existir (site/versão antiga) ou a permissão não foi concedida.
+function sincronizarBolhaNativa(proxima, numero) {
+  const bubble = window.Capacitor?.Plugins?.BubbleOverlay;
+  if (!bubble) return;
+  bubble.show({
+    rotaId: detailRota.id,
+    osId: proxima.id,
+    numero,
+    label: osLabel(proxima),
+    endereco: proxima.endereco,
+    bancoServico: [proxima.banco, proxima.servico, prazoLabel(proxima) || null].filter(Boolean).join(" · "),
+    mapsUrl: mapsUrl(proxima),
+    wazeUrl: wazeUrl(proxima),
+    whatsUrl: whatsUrl(proxima) || "",
+  }).catch(() => {});
+}
+
+// A bolha nativa não mexe no Supabase sozinha (não tem a sessão logada) — ela só traz o app de
+// volta pra frente com a ação pendente (ver MainActivity.despacharAcaoDaBolha), e aqui a gente
+// aplica de verdade usando a mesma lógica da lista de paradas.
+window.addEventListener("bolhaAcao", async (e) => {
+  const { acao, osId, rotaId } = e.detail || {};
+  if (!acao || !osId) return;
+  if (!detailRota || detailRota.id !== rotaId) await openRotaDetail(rotaId);
+  const os = detailStops.find((s) => s.id === osId);
+  if (!os) return;
+  if (acao === "entregue") await alternarConcluido(os);
+  else if (acao === "adiar") await alternarAdiado(os);
+  abrirMapsProximaParada();
+});
 
 $("floating-bubble").addEventListener("click", () => {
   $("floating-panel").classList.toggle("hidden");
@@ -884,8 +1112,8 @@ async function reotimizarRotaAtual() {
   toast("Recalculando rota...");
   const origin = detailRota.origem_lat ? { lat: detailRota.origem_lat, lng: detailRota.origem_lng } : null;
   try {
-    const result = await optimizeTrip(comCoordenadas, origin);
-    detailStops = result.order.map((i) => comCoordenadas[i]);
+    const result = await otimizarComPrioridadeDePrazo(comCoordenadas, origin);
+    detailStops = result.order;
     await supabase.from("rotas").update({
       distancia_km: result.distanceKm, duracao_min: result.durationMin, geometria: result.geometry,
     }).eq("id", detailRota.id);

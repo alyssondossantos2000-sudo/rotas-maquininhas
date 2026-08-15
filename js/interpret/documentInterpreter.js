@@ -13,7 +13,7 @@ import {
   PADRAO_TELEFONE,
   encontrarPrimeiro,
   apenasDigitos,
-} from "../layout/fieldDetection.js?v=16";
+} from "../layout/fieldDetection.js?v=19";
 
 // Marcas/adquirentes comuns nos formulários de OS de maquininha — usadas pra descobrir o "banco"
 // quando o documento não tem um rótulo "Banco:" explícito (o mais comum na prática) e o usuário
@@ -107,20 +107,74 @@ export function interpretarDocumento(blocos, tipoSelecionado) {
     if (m) campoNumeroOs = { label: "numero_os", value: m[0], confidence: null, bbox: [] };
   }
 
-  // Formulário tipo Sicredi identifica o cliente por "Razão Social", não por "Cliente:".
-  const padroesCliente = /sicredi/i.test(tipoSelecionado || "")
-    ? [
+  const ehAzulzinha = /azulzinha/i.test(tipoSelecionado || "");
+  const ehSicredi = /sicredi/i.test(tipoSelecionado || "");
+
+  // Formulário no mesmo molde "Azulzinha" (Razão Social / Nome Fantasia / Contato / Celular) é
+  // usado por mais de um banco — Sicredi inclusive — mas cada um combina os campos de nome de um
+  // jeito diferente:
+  //   Azulzinha: Razão Social + Nome Fantasia (normalmente vêm iguais, só concatena se diferentes).
+  //   Sicredi: Razão Social + o NOME da pessoa em "Contato:" (aqui é útil saber quem procurar,
+  //            diferente do Azulzinha onde isso vira Observações).
+  let campoCliente;
+  if (ehAzulzinha) {
+    const razaoSocial = buscarCampo(blocos, [new RegExp("raz[aã]o\\s*social\\s*[:\\-]\\s*(.+?)" + NEXT_LABEL, "im")], temConteudo);
+    const nomeFantasia = buscarCampo(blocos, [new RegExp("nome\\s*fantasia\\s*[:\\-]\\s*(.+?)" + NEXT_LABEL, "im")], temConteudo);
+    const nomes = [razaoSocial?.valor, nomeFantasia?.valor].filter(Boolean);
+    const nomesUnicos = [...new Set(nomes.map((n) => n.trim().toUpperCase()))];
+    campoCliente = {
+      label: "nome_cliente",
+      value: nomesUnicos.length > 1 ? nomes.join(" — ") : (nomes[0] || ""),
+      confidence: razaoSocial?.confianca ?? nomeFantasia?.confianca ?? null,
+      bbox: razaoSocial?.bbox ?? nomeFantasia?.bbox ?? [],
+    };
+  } else if (ehSicredi) {
+    const razaoSocial = buscarCampo(blocos, [new RegExp("raz[aã]o\\s*social\\s*[:\\-]\\s*(.+?)" + NEXT_LABEL, "im")], temConteudo);
+    const contatoPessoa = buscarCampo(blocos, [new RegExp("\\bcontato\\s*[:\\-]\\s*(.+?)" + NEXT_LABEL, "im")], temConteudo);
+    const partes = [razaoSocial?.valor, contatoPessoa?.valor].filter(Boolean);
+    if (partes.length) {
+      campoCliente = {
+        label: "nome_cliente",
+        value: partes.join(" — "),
+        confidence: razaoSocial?.confianca ?? contatoPessoa?.confianca ?? null,
+        bbox: razaoSocial?.bbox ?? contatoPessoa?.bbox ?? [],
+      };
+    } else {
+      // Fallback pra alguma variante mais antiga do formulário Sicredi que não venha nesse molde.
+      const cliente = buscarCampo(
+        blocos,
+        [new RegExp("\\bcliente\\s*[:\\-]\\s*(.+?)" + NEXT_LABEL, "im"), /nome\s*fantasia\s*[:\-]\s*(.+)/i],
+        temConteudo
+      );
+      campoCliente = campoOuVazio(cliente, "nome_cliente");
+    }
+  } else if (/\bcielo\b/i.test(tipoSelecionado || "")) {
+    // Cielo também traz Razão Social + Nome Fantasia, mas o Nome Fantasia costuma vir truncado
+    // (ex: "CRESPO E PALADINI GAS E TRANSP" em vez de "...TRANSPORTES LTDA") — prioriza a Razão
+    // Social, que vem completa. Sem combinar com Contato aqui (diferente do Sicredi): no Cielo o
+    // "Contato:" é só um primeiro nome solto (ex: "LUIS"), não ajuda tanto quanto no Sicredi.
+    const cliente = buscarCampo(
+      blocos,
+      [
         new RegExp("raz[aã]o\\s*social\\s*[:\\-]\\s*(.+?)" + NEXT_LABEL, "im"),
         new RegExp("\\bcliente\\s*[:\\-]\\s*(.+?)" + NEXT_LABEL, "im"),
         /nome\s*fantasia\s*[:\-]\s*(.+)/i,
-      ]
-    : [
+      ],
+      temConteudo
+    );
+    campoCliente = campoOuVazio(cliente, "nome_cliente");
+  } else {
+    const cliente = buscarCampo(
+      blocos,
+      [
         new RegExp("\\bcliente\\s*[:\\-]\\s*(.+?)" + NEXT_LABEL, "im"),
         /nome\s*fantasia\s*[:\-]\s*(.+)/i,
         new RegExp("raz[aã]o\\s*social\\s*[:\\-]\\s*(.+?)" + NEXT_LABEL, "im"),
-      ];
-  const cliente = buscarCampo(blocos, padroesCliente, temConteudo);
-  const campoCliente = campoOuVazio(cliente, "nome_cliente");
+      ],
+      temConteudo
+    );
+    campoCliente = campoOuVazio(cliente, "nome_cliente");
+  }
 
   const enderecoBase = buscarCampo(blocos, [/endere[cç]o\s*[:\-]\s*(.+)/i], temConteudo);
   const bairro = buscarCampo(blocos, [/bairro\s*[:\-]\s*(.+)/i], temConteudo);
@@ -187,7 +241,35 @@ export function interpretarDocumento(blocos, tipoSelecionado) {
     bbox: contato?.bbox ?? [],
   };
 
-  const fields = [campoNumeroOs, campoCliente, campoEndereco, campoBanco, campoServico, campoContato];
+  // "Observação:"/"Observações:" é rótulo genérico (achado em mais de um banco — Azulzinha tem
+  // "Observação: Bobina", C-Trends tem "Observação: TELEFONE:... PROCURAR QUEM:...") — vale a pena
+  // capturar pra qualquer banco, não só um.
+  const observacaoGenerica = buscarCampo(
+    blocos,
+    [new RegExp("observa[cç][aã]o(?:es)?\\s*[:\\-]\\s*(.+?)" + NEXT_LABEL, "im")],
+    temConteudo
+  );
+  let valorObservacoes = observacaoGenerica?.valor || "";
+
+  // Azulzinha (Caixa) tem um "Contato:" separado que é o NOME da pessoa (não telefone — esse já
+  // vem de "Celular:" acima) — não temos um campo próprio pra isso no formulário de OS, então cai
+  // em Observações também, sem apagar a observação genérica se já tiver achado uma.
+  if (ehAzulzinha) {
+    const contatoPessoa = buscarCampo(blocos, [new RegExp("\\bcontato\\s*[:\\-]\\s*(.+?)" + NEXT_LABEL, "im")], temConteudo);
+    if (contatoPessoa) {
+      valorObservacoes = valorObservacoes
+        ? `${valorObservacoes} — Contato: ${contatoPessoa.valor}`
+        : `Contato: ${contatoPessoa.valor}`;
+    }
+  }
+  const campoObservacoes = {
+    label: "observacoes",
+    value: valorObservacoes,
+    confidence: observacaoGenerica?.confianca ?? null,
+    bbox: observacaoGenerica?.bbox ?? [],
+  };
+
+  const fields = [campoNumeroOs, campoCliente, campoEndereco, campoBanco, campoServico, campoContato, campoObservacoes];
   const confiancasValidas = fields.map((f) => f.confidence).filter((c) => c != null);
   const confidence = confiancasValidas.length
     ? +(confiancasValidas.reduce((a, b) => a + b, 0) / confiancasValidas.length).toFixed(2)
@@ -213,5 +295,6 @@ export function paraCamposDeOs(resultado) {
     banco: porLabel.banco || "",
     servico: porLabel.servico || "",
     contato: porLabel.contato || "",
+    observacoes: porLabel.observacoes || "",
   };
 }

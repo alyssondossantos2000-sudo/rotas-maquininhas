@@ -1,5 +1,61 @@
 # Pedido pro chat novo: servidor de OCR local no PC (modelo forte)
 
+## STATUS: SERVIDOR PRONTO E TESTADO (2026-07-28)
+O servidor pedido abaixo já foi construído, roda na GPU (RTX 3060) e foi validado com fotos reais
+de `fotos-teste/` (formulários Stone/FedEx e Sicredi — nomes, endereço, CPF, tudo extraído certo).
+Se você é o chat que vai plugar `LocalServerProvider` em `js/ocr/provider.js`, é só ler esta seção.
+
+- **Código:** `C:\Users\alyss\Desktop\ocr-server-local\` (FORA do repo do app, de propósito — não
+  precisa nem deve ser commitado no GitHub Pages). Python 3.12 num venv próprio
+  (`.venv`), instalado à parte porque o Python padrão da máquina (3.13/3.14) não roda PaddleOCR.
+- **Iniciar:** rodar `iniciar.bat` (ou `.venv\Scripts\python.exe -m uvicorn app:app --host 0.0.0.0
+  --port 8877` de dentro da pasta). Fica escutando em `http://<ip-do-pc>:8877`.
+- **Checagem de disponibilidade:** `GET /health` → `{"status":"ok"}`. Use isso pro timeout curto
+  (2-3s) de detectar se o PC está acessível antes de mandar a foto de verdade.
+- **Endpoint principal:** `POST /ocr`, multipart/form-data com campos:
+  - `imagem` (arquivo, obrigatório) — a foto.
+  - `ia` (`"true"`/`"false"`, opcional, default `true`) — liga/desliga a segunda passada de IA
+    (ver abaixo). Pensado pro usuário poder escolher "modo rápido" vs "modo capricho" na hora.
+  - `modelo_ia` (string, opcional) — força um modelo específico do Ollama em vez da ordem padrão.
+- **Resposta JSON** (bate com o formato pedido originalmente, só com 3 campos a mais no final):
+  ```json
+  {
+    "texto": "texto completo, uma linha do formulário por linha",
+    "palavras": [
+      {"texto": "...", "confianca": 0.98, "bbox": {"x0":0,"y0":0,"x1":0,"y1":0}}
+    ],
+    "ia_usada": true,
+    "modelo_ia": "qwen2.5vl:7b",
+    "texto_ia": "texto corrigido pela IA (só existe se ia_usada=true)",
+    "tempo_ms": 2043
+  }
+  ```
+  `bbox` é em PIXELS da foto original (não normalizado), `x0,y0` = canto superior esquerdo. Os
+  `palavras` vêm SEMPRE do PaddleOCR (bbox real por palavra, não por linha inteira). Se
+  `ia_usada=true`, use `texto_ia` como o texto pra interpretar/extrair campos (é o corrigido); senão
+  use `texto`. `palavras`/overlay sempre vêm do PaddleOCR nos dois casos.
+- **Motor escolhido:** **PaddleOCR (PP-OCRv6) rodando na GPU**, não o modelo de visão puro que era
+  a 1ª opção sugerida abaixo — motivo: modelo de visão (LLM) não dá bbox por palavra confiável, e o
+  overlay do app precisa disso. Fica como passada OPCIONAL de correção (ver `ia`), não como motor
+  principal.
+  - **Pegadinha real encontrada:** `paddlepaddle` (CPU) 3.3.1 no Windows quebra com MKLDNN ligado
+    (erro `ConvertPirAttribute2RuntimeAttribute not support`) — CPU sem MKLDNN ficava em ~2min por
+    foto. Resolvido trocando pra `paddlepaddle-gpu` (CUDA 12.6, compatível com o driver da RTX
+    3060) — contorna o bug E acelera.
+  - PaddleOCR 3.x mudou a API (não é mais `.ocr()`, é `.predict()`) e com
+    `return_word_box=True` já devolve bbox de palavra de verdade (`text_word`/`text_word_boxes`),
+    não precisou aproximar dividindo a linha.
+- **IA opcional (`ia=true`):** manda a MESMA foto (reduzida pra até 1400px no lado maior, só nessa
+  chamada — o PaddleOCR usa a foto em resolução cheia) pro Ollama local (`qwen2.5vl:7b`, com
+  fallback pra `llama3.2-vision` se o primeiro não estiver puxado) pedindo pra corrigir o texto lido
+  pelo OCR olhando a imagem de verdade. Corrigiu erros reais no teste (`FInal`→`Final`,
+  `Inlclal`→`Inicial`, removeu duplicação `Rua Rua Campo Grande`→`Rua Campo Grande`).
+- **Tempos reais medidos** (foto 4000x3000, RTX 3060, modelo já carregado/quente):
+  - Sem IA (só PaddleOCR): **~2 segundos**.
+  - Com IA (Qwen2.5-VL): **~21 segundos** (chamada fria do Ollama pode passar de 40s).
+  - Primeira chamada depois de religar o servidor é mais lenta (~13s) porque carrega os modelos do
+    PaddleOCR na GPU; chamadas seguintes ficam nesses números acima.
+
 ## Contexto
 App "Rotas Maquininhas" (`C:\Users\alyss\Desktop\RotasMaquininhas`) lê formulários de OS
 fotografados (documento comum de maquininha de cartão — texto pequeno, letra de forma e

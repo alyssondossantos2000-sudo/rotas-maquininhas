@@ -2,8 +2,9 @@
 // baixo. Trocar por um serviço pago no futuro (Google Vision, Azure, etc.) significa escrever uma
 // nova classe com os mesmos dois métodos e trocar a instância em getOcrProvider(), sem tocar em
 // layout/, interpret/ ou ui/.
-import { comLog } from "../core/logger.js?v=16";
-import { criarMlKitProvider } from "./mlkitProvider.js?v=16";
+import { comLog } from "../core/logger.js?v=19";
+import { criarMlKitProvider } from "./mlkitProvider.js?v=19";
+import { criarLocalServerProvider, lerConfigServidorLocal } from "./localServerProvider.js?v=19";
 
 function traduzirStatus(m) {
   if (m.status === "recognizing text") return `Lendo a foto... ${Math.round(m.progress * 100)}%`;
@@ -57,6 +58,32 @@ class TesseractProvider {
   }
 }
 
+// Dentro do app nativo, tenta primeiro o servidor OCR do PC (mais forte, mesma rede Wi-Fi de
+// casa) e só cai pro ML Kit se o PC não responder no /health em até ~2.5s ou se a chamada de
+// verdade falhar no meio (ver localServerProvider.js) — nunca trava esperando o PC.
+class CompositeNativeProvider {
+  constructor(local, mlkit) {
+    this._local = local;
+    this._mlkit = mlkit;
+  }
+
+  warmup(onStatus) {
+    return this._mlkit.warmup(onStatus);
+  }
+
+  async reconhecer(imagemBlob, onStatus) {
+    const config = lerConfigServidorLocal();
+    if (config.ip && (await this._local.disponivel(config))) {
+      try {
+        return await this._local.reconhecer(imagemBlob, onStatus);
+      } catch (err) {
+        console.error("Servidor local do PC falhou, caindo pro ML Kit:", err);
+      }
+    }
+    return this._mlkit.reconhecer(imagemBlob, onStatus);
+  }
+}
+
 let instanciaPadrao = null;
 // Dentro do app nativo (APK) usa o Google ML Kit — offline, embutido no APK, e melhor que
 // Tesseract em foto de câmera real. No site (navegador comum, sem Capacitor) o ML Kit não existe,
@@ -65,7 +92,9 @@ let instanciaPadrao = null;
 export function getOcrProvider() {
   if (!instanciaPadrao) {
     const nativo = window.Capacitor?.isNativePlatform?.() === true;
-    instanciaPadrao = nativo ? criarMlKitProvider() : new TesseractProvider();
+    instanciaPadrao = nativo
+      ? new CompositeNativeProvider(criarLocalServerProvider(), criarMlKitProvider())
+      : new TesseractProvider();
   }
   return instanciaPadrao;
 }

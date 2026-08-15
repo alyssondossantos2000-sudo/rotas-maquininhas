@@ -63,11 +63,19 @@ function gerarTentativas(address) {
   return tentativas;
 }
 
-// Tipos "genéricos demais" pra servir de pino de OS — são contorno de cidade/bairro/estado, não um
-// endereço de verdade. Um resultado assim só é aceito se nenhuma tentativa mais específica achar
-// nada melhor.
+// Tipos "genéricos demais" pra servir de pino de OS — são contorno de cidade/bairro/estado (ou só
+// a área de um CEP inteiro, que em cidade pequena pode cobrir vários bairros), não um endereço de
+// verdade. Um resultado assim só é aceito como reserva (aproximado), nunca como o resultado final
+// aceito de cara — só se nenhuma tentativa mais específica achar nada melhor.
+//
+// BUG REAL encontrado com dados de produção: "postcode" não estava nessa lista, então uma tentativa
+// que só achava o CEP (ex: endereço com rua não mapeada ainda no OpenStreetMap) passava como
+// "específico" e era aceita direto — 7 OS de clientes DIFERENTES acabaram com a MESMA coordenada
+// (centro da área do CEP), incluindo pelo menos um caso real onde o pino ficou a ~4km do endereço
+// verdadeiro.
 const TIPO_GENERICO_DEMAIS = new Set([
   "country", "state", "region", "county", "municipality", "city", "town", "village", "administrative",
+  "postcode", "postal_code", "suburb", "neighbourhood",
 ]);
 function ehEspecifico(r) {
   return !!r && !TIPO_GENERICO_DEMAIS.has(r.addresstype) && r.class !== "boundary";
@@ -87,22 +95,35 @@ export async function geocodeAddress(address) {
 
   let reserva = null; // melhor resultado genérico encontrado até agora, usado só se nada específico aparecer
   let resultado = null;
-  try {
-    for (const tentativa of tentativas) {
-      const r = await buscarNominatim(tentativa);
-      if (!r) continue;
-      const aproximado = tentativa !== address;
-      if (ehEspecifico(r)) {
-        resultado = { ...r, aproximado };
-        break;
-      }
-      if (!reserva) reserva = { ...r, aproximado: true };
+  let algumaTentativaRespondeu = false; // pelo menos uma chamada chegou a completar (não caiu por erro de rede)
+  for (const tentativa of tentativas) {
+    let r;
+    try {
+      r = await buscarNominatim(tentativa);
+      algumaTentativaRespondeu = true;
+    } catch (err) {
+      // Erro de rede/CORS/limite de taxa numa tentativa NÃO pode derrubar as tentativas seguintes
+      // (mais simples, mais chance de achar algo) — só essa tentativa específica falhou, não a busca
+      // inteira. Antes disso aqui era um try/catch em volta do laço inteiro: uma falha de rede na
+      // 1ª tentativa (endereço completo) impedia até a 2ª tentativa (rua sem número) de rodar, que
+      // muitas vezes é a que realmente acha o endereço.
+      console.error(`Erro ao geocodificar tentativa "${tentativa}":`, err);
+      continue;
     }
-  } catch (err) {
-    console.error("Erro ao geocodificar:", err);
+    if (!r) continue;
+    const aproximado = tentativa !== address;
+    if (ehEspecifico(r)) {
+      resultado = { ...r, aproximado };
+      break;
+    }
+    if (!reserva) reserva = { ...r, aproximado: true };
   }
 
   const final = resultado || reserva;
-  cache.set(key, final);
+  // Só guarda em cache se pelo menos uma tentativa de verdade respondeu (achando algo ou não). Se
+  // TODAS falharam por erro de rede (ex: sem sinal no meio do trajeto), não vale a pena travar esse
+  // endereço como "sem resultado" pro resto da sessão — o usuário pode tentar de novo com internet
+  // melhor e merece uma nova chance de busca, não o mesmo null guardado.
+  if (algumaTentativaRespondeu) cache.set(key, final);
   return final;
 }
